@@ -1,0 +1,17 @@
+export const ImageSource = {
+    Exit: require('../../../assets/Images/Exit.png'),
+    ExitImage: require('../../../assets/Images/ExitImage.png'),
+    KeyCabin: require('../../../assets/Images/KeyCabin.png'),
+    LoadingArea: require('../../../assets/Images/LoadingArea.png'),
+    Logo: require('../../../assets/Images/Logo.png'),
+    LogoName: require('../../../assets/Images/LogoName.png'),
+    LogoNameWhite: require('../../../assets/Images/LogoNameWhite.png'),
+    Menu: require('../../../assets/Images/Menu.png'),
+    NavigateWhite: require('../../../assets/Images/NavigateWhite.png'),
+    NOCRoom: require('../../../assets/Images/NOCRoom.png'),
+    Qr: require('../../../assets/Images/Qr.png'),
+    RightArrow: require('../../../assets/Images/RightArrow.png'),
+    ServerCloud: require('../../../assets/Images/ServerCloud.png'),
+    ServerMan: require('../../../assets/Images/ServerMan.png'),
+    WashRoom: require('../../../assets/Images/WashRoom.png'),
+}
