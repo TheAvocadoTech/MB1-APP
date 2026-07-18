@@ -6,13 +6,16 @@ import { ImageSource } from '../../../../constants/assets/images'
 import { useTheme } from '../../../../theme/ThemeProvider'
 import { useStyles } from './ScanQr.styles'
 import PrimaryButton from '../../../../components/Button/PrimaryButton/PrimaryButton'
+import { useNavigation } from '@react-navigation/native'
+import { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
 const ScanQr = () => {
     const { colors } = useTheme();
     const styles = useStyles(colors);
+    const navigation = useNavigation<NativeStackNavigationProp<any>>();
 
     const handlePressScanQR = () => {
-
+        navigation.navigate('cameraScanner');
     }
 
     return (
