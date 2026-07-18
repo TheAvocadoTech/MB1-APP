@@ -10,7 +10,7 @@ import { useDispatch } from 'react-redux';
 import AsyncStorage from '@react-native-community/async-storage';
 
 import { setCredentials, clearCredentials } from '../../../../store/slices/authSlice';
-import { scanQRToken } from '../../../../services/ApiUtility';
+import { scanQRToken, fetchVisitorDashboard } from '../../../../services/ApiUtility';
 
 const SplashScreen = () => {
     const { colors } = useTheme();
@@ -27,13 +27,14 @@ const SplashScreen = () => {
                 console.log('Static login is active. Logging in with mock details...');
                 const mockToken = 'dev_static_token';
                 const mockVisitor = {
-                    id: 'dev_mock_id',
+                    id: '6a5b94931ae29a1c7f808125', // Matches your Postman visitor ID
                     visitorName: 'Developer Guest',
                     phoneNumber: '9999999999',
                     email: 'developer@equinix.com',
                     company: 'Equinix Dev Team',
                     purpose: 'Screen Development',
                     checkedIn: true,
+                    qrExpiresAt: new Date(Date.now() + 150000).toISOString(), // Expires in 2.5 minutes
                 };
                 dispatch(setCredentials({ token: mockToken, visitor: mockVisitor }));
                 
@@ -45,15 +46,15 @@ const SplashScreen = () => {
 
             try {
                 const savedToken = await AsyncStorage.getItem('user_token');
-                const savedVisitorJson = await AsyncStorage.getItem('user_visitor');
 
                 if (savedToken) {
-                    console.log('Found saved token, verifying...');
-                    const res = await scanQRToken(savedToken);
+                    console.log('Found saved token, fetching dashboard...');
+                    const res = await fetchVisitorDashboard(savedToken);
 
-                    if (res && res.success && res.isValid && res.data) {
+                    if (res && res.success && res.data) {
                         console.log('Session is valid, auto-logging in...');
                         dispatch(setCredentials({ token: savedToken, visitor: res.data }));
+                        await AsyncStorage.setItem('user_visitor', JSON.stringify(res.data));
                         navigation.replace('dashboard');
                         return;
                     }

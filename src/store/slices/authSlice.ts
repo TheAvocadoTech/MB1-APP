@@ -11,6 +11,8 @@ export interface VisitorData {
     checkedIn?: boolean;
     checkedInAt?: string | null;
     qrExpiresAt?: string;
+    qrCode?: string;
+    qrToken?: string;
     createdAt?: string;
 }
 

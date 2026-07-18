@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-community/async-storage';
 import { store } from '../store/store';
 
 const api = axios.create({
-    baseURL: 'https://backend.minutos.shop/api',
+    baseURL: 'https://api.avocadotech.in/',
     timeout: 120000,
     headers: {
         'Content-Type': 'application/json',
@@ -13,7 +13,7 @@ const api = axios.create({
 });
 
 const apiFormData = axios.create({
-    baseURL: 'https://mb3-ivxh.onrender.com/',
+    baseURL: 'https://api.avocadotech.in/',
     timeout: 120000,
 });
 
@@ -124,16 +124,36 @@ export const deleteData = async (endpoint: string) => {
     }
 };
 
-export const BACKEND_BASE_URL = 'http://localhost:3000/api/IDVisitor';
-
 export const scanQRToken = async (token: string) => {
     try {
-        const response = await axios.post(`${BACKEND_BASE_URL}/visitors/scan`, { token }, {
+        const response = await api.post('/api/IDVisitor/visitors/scan', { token });
+        return response.data;
+    } catch (error) {
+        if (axios.isAxiosError(error) && error.response) {
+            return error.response.data;
+        }
+        throw error;
+    }
+};
+
+export const regenerateQR = async (visitorId: string) => {
+    try {
+        const response = await api.post(`/api/IDVisitor/visitors/${visitorId}/regenerate-qr`);
+        return response.data;
+    } catch (error) {
+        if (axios.isAxiosError(error) && error.response) {
+            return error.response.data;
+        }
+        throw error;
+    }
+};
+
+export const fetchVisitorDashboard = async (token: string) => {
+    try {
+        const response = await api.get('/api/IDVisitor/visitors/dashboard', {
             headers: {
-                'Content-Type': 'application/json',
-                Accept: 'application/json',
+                Authorization: `Bearer ${token}`,
             },
-            timeout: 15000,
         });
         return response.data;
     } catch (error) {

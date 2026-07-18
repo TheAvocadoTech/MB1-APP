@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Image, TouchableOpacity, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import { View, Image, TouchableOpacity, ActivityIndicator, Alert, ScrollView, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -8,7 +8,6 @@ import { default as Text } from '../../../../components/Text/MSText';
 import { ImageSource } from '../../../../constants/assets/images';
 import { useTheme } from '../../../../theme/ThemeProvider';
 import { useStyles } from './NavigationScreen.styles';
-import CenterContentModal from '../../../../components/Modal/CenterContentModal/CenterContentModal';
 
 type RouteParams = {
     NavigationScreen: {
@@ -27,14 +26,20 @@ const NavigationScreen = () => {
     const [selectedFloor, setSelectedFloor] = useState<string>('F2');
     const [zoomScale, setZoomScale] = useState<number>(1.0);
     const [containerLayout, setContainerLayout] = useState<{ width: number; height: number } | null>(null);
-    const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
 
     const handleBack = () => {
         navigation.goBack();
     };
 
-    const handleGetIntoPhone = () => {
-        setShowSuccessModal(true);
+    const handleGetIntoPhone = async () => {
+        const destination = 'Equinix Datacenter';
+        const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`;
+        try {
+            await Linking.openURL(url);
+        } catch (error) {
+            Alert.alert('Error', 'Unable to open maps.');
+            console.log('Error opening maps:', error);
+        }
     };
 
     const onContainerLayout = (event: any) => {
@@ -212,12 +217,7 @@ const NavigationScreen = () => {
                 </TouchableOpacity>
             </View>
 
-            <CenterContentModal
-                visible={showSuccessModal}
-                icon={ImageSource.ServerCloud}
-                title="Navigation Sync Complete"
-                description={`Corridor route to cabinet ${cabinetName} on level ${selectedFloor} has been successfully downloaded for offline access.`}
-            />
+
         </SafeAreaView>
     );
 };
