@@ -8,20 +8,31 @@ import { ImageSource } from '../../../../constants/assets/images';
 import CabinatesTab from '../../components/CabinatesTab/CabinatesTab';
 import CommonTab from '../../components/CommonTab/CommonTab';
 import CenterContentModal from '../../../../components/Modal/CenterContentModal/CenterContentModal';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 const DashboardScreen = () => {
+    const navigation = useNavigation<NativeStackNavigationProp<any>>();
     const [showModal, setShowModal] = useState<boolean>(false);
     const [selectedTab, setSelectedTab] = React.useState<'cabinets' | 'common'>('cabinets');
+    const [selectedCabinet, setSelectedCabinet] = useState<string | null>(null);
     const { colors } = useTheme();
     const styles = useStyles(colors);
 
     const handlePressTab = (type: 'cabinets' | 'common') => {
         setSelectedTab(type);
+        setSelectedCabinet(null);
     }
 
     const handleLogoutPress = () => {
         setShowModal(true);
     }
+
+    const handlePressStartNavigation = () => {
+        if (selectedCabinet) {
+            navigation.navigate('navigationScreen', { cabinetName: selectedCabinet });
+        }
+    };
 
     return (
         <SafeAreaView edges={["bottom", "top"]} style={styles.container}>
@@ -57,12 +68,31 @@ const DashboardScreen = () => {
                         </View>
                     </View>
                     {
-                        selectedTab === 'cabinets' ? <CabinatesTab /> : <CommonTab />
+                        selectedTab === 'cabinets' ? (
+                            <CabinatesTab 
+                                selectedCabinet={selectedCabinet}
+                                onSelectCabinet={setSelectedCabinet}
+                            />
+                        ) : <CommonTab />
                     }
 
                 </View>
+
+                {/* Spacer so content doesn't hide behind floating button */}
+                {selectedCabinet && <View style={{ height: 100 }} />}
+
                 <CenterContentModal visible={showModal} icon={ImageSource.ExitImage} title='Are you sure you want to Log Out!' description='You are logout, you need to input your desstails'/>
             </ScrollView>
+
+            {/* Floating Navigation Button */}
+            {selectedCabinet && (
+                <View style={styles.floatingButtonContainer}>
+                    <TouchableOpacity style={styles.floatingButton} onPress={handlePressStartNavigation}>
+                        <Text style={styles.floatingButtonText} varient="semiBold">Start Navigation</Text>
+                        <Image source={ImageSource.NavigateWhite} style={styles.floatingButtonIcon} />
+                    </TouchableOpacity>
+                </View>
+            )}
         </SafeAreaView>
     )
 }

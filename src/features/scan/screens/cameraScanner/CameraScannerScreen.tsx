@@ -1,18 +1,23 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Animated, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import { View, Animated, TouchableOpacity, Image, ActivityIndicator, Alert, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Camera, useCameraDevice, useCameraPermission, useCodeScanner, CameraPermissionStatus } from 'react-native-vision-camera';
+import { useDispatch } from 'react-redux';
+import AsyncStorage from '@react-native-community/async-storage';
 
 import { default as Text } from '../../../../components/Text/MSText';
 import { ImageSource } from '../../../../constants/assets/images';
 import { useTheme } from '../../../../theme/ThemeProvider';
 import { useStyles } from './CameraScannerScreen.styles';
+import { setCredentials } from '../../../../store/slices/authSlice';
+import { scanQRToken } from '../../../../services/ApiUtility';
 
 const CameraScannerScreen = () => {
     const { colors } = useTheme();
     const styles = useStyles(colors);
     const navigation = useNavigation<NativeStackNavigationProp<any>>();
+    const dispatch = useDispatch();
 
     const [cameraPos, setCameraPos] = useState<'back' | 'front'>('back');
     const [torchOn, setTorchOn] = useState<boolean>(false);
@@ -20,18 +25,23 @@ const CameraScannerScreen = () => {
     const [permissionStatus, setPermissionStatus] = useState<CameraPermissionStatus>(() => Camera.getCameraPermissionStatus());
     const [isActive, setIsActive] = useState<boolean>(true);
     const [scanned, setScanned] = useState<boolean>(false);
+    const [loading, setLoading] = useState<boolean>(false);
 
     const device = useCameraDevice(cameraPos);
     const scanValue = useRef(new Animated.Value(0)).current;
 
     // Request camera permission on mount
+    // useEffect(() => {
+    //     if (permissionStatus === 'not-determined') {
+    //         requestPermission().then((granted) => {
+    //             setPermissionStatus(granted ? 'granted' : 'denied');
+    //         });
+    //     }
+    // }, [permissionStatus, requestPermission]);
+
     useEffect(() => {
-        if (permissionStatus === 'not-determined') {
-            requestPermission().then((granted) => {
-                setPermissionStatus(granted ? 'granted' : 'denied');
-            });
-        }
-    }, [permissionStatus, requestPermission]);
+        if (!hasPermission) requestPermission();
+    }, [hasPermission, requestPermission]);
 
     // Set up loop animation for the scanning laser line
     useEffect(() => {
@@ -63,16 +73,63 @@ const CameraScannerScreen = () => {
     const codeScanner = useCodeScanner({
         codeTypes: ['qr'],
         onCodeScanned: (codes) => {
-            if (scanned || codes.length === 0) return;
+            if (scanned || loading || codes.length === 0) return;
 
             const firstCode = codes[0];
             const codeValue = firstCode.value;
             if (codeValue) {
                 setScanned(true);
                 setIsActive(false);
-                console.log('QR Code Scanned successfully: ', codeValue);
-                // Navigate to the dashboard to login
-                navigation.replace('dashboard');
+                setLoading(true);
+                console.log('QR Code Scanned, verifying: ', codeValue);
+
+                scanQRToken(codeValue)
+                    .then((res) => {
+                        setLoading(false);
+                        if (res && res.success && res.isValid && res.data) {
+                            // Save user token and details to AsyncStorage
+                            Promise.all([
+                                AsyncStorage.setItem('user_token', codeValue),
+                                AsyncStorage.setItem('user_visitor', JSON.stringify(res.data)),
+                            ]).then(() => {
+                                // Update Redux state
+                                dispatch(setCredentials({ token: codeValue, visitor: res.data }));
+                                // Navigate to dashboard
+                                navigation.replace('dashboard');
+                            });
+                        } else {
+                            Alert.alert(
+                                'Invalid QR Code',
+                                res?.message || 'QR code is invalid or expired.',
+                                [
+                                    {
+                                        text: 'OK',
+                                        onPress: () => {
+                                            setScanned(false);
+                                            setIsActive(true);
+                                        },
+                                    },
+                                ]
+                            );
+                        }
+                    })
+                    .catch((err) => {
+                        setLoading(false);
+                        console.log('Error verifying QR token:', err);
+                        Alert.alert(
+                            'Verification Error',
+                            'Unable to connect to the verification server. Please try again.',
+                            [
+                                {
+                                    text: 'OK',
+                                    onPress: () => {
+                                        setScanned(false);
+                                        setIsActive(true);
+                                    },
+                                },
+                            ]
+                        );
+                    });
             }
         }
     });
@@ -195,6 +252,14 @@ const CameraScannerScreen = () => {
             <Text style={styles.footerText} varient="medium">
                 Align QR Code within frame to Scan
             </Text>
+
+            {/* Verification Loading Overlay */}
+            {loading && (
+                <View style={[StyleSheet.absoluteFillObject, { justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.7)', zIndex: 100 }]}>
+                    <ActivityIndicator size="large" color="#E2231A" />
+                    <Text style={{ color: '#FFFFFF', marginTop: 15, fontWeight: 'bold' }}>Verifying QR Code...</Text>
+                </View>
+            )}
         </View>
     );
 };

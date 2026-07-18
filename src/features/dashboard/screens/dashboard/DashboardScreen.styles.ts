@@ -76,7 +76,9 @@ export const useStyles = (colors: ColorsType) =>
             marginTop: 44
         },
         tab: {
-            width: 186,
+            // width: 186,
+            // height: 60,
+            flex:1,
             height: 60,
             borderRadius: 63,
             backgroundColor: "#EEEEEE",
@@ -93,5 +95,36 @@ export const useStyles = (colors: ColorsType) =>
         },
         activeTabText: {
             color: colors.primaryCtaText
+        },
+        floatingButtonContainer: {
+            position: 'absolute',
+            bottom: 30,
+            left: 20,
+            right: 20,
+            zIndex: 20,
+        },
+        floatingButton: {
+            height: 65,
+            backgroundColor: colors.primary,
+            borderRadius: 65,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 12,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.3,
+            shadowRadius: 5,
+            elevation: 8,
+        },
+        floatingButtonText: {
+            color: colors.primaryCtaText,
+            fontSize: 18,
+            fontWeight: 'bold',
+        },
+        floatingButtonIcon: {
+            width: 24,
+            height: 24,
+            tintColor: colors.primaryCtaText,
         },
     });

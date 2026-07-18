@@ -17,11 +17,11 @@ const apiFormData = axios.create({
     timeout: 120000,
 });
 
-const { token } = store.getState().auth;
-
 apiFormData.interceptors.request.use(
     async config => {
+        const token = store.getState().auth.token;
         if (token) {
+            config.headers = config.headers || {};
             config.headers.Authorization = `Bearer ${token}`;
         }
         return config;
@@ -31,7 +31,9 @@ apiFormData.interceptors.request.use(
 
 api.interceptors.request.use(
     async config => {
+        const token = store.getState().auth.token;
         if (token) {
+            config.headers = config.headers || {};
             config.headers.Authorization = `Bearer ${token}`;
         }
         return config;
@@ -119,6 +121,26 @@ export const deleteData = async (endpoint: string) => {
         } else {
             console.log("Delete Generic Error:", error);
         }
+    }
+};
+
+export const BACKEND_BASE_URL = 'http://localhost:3000/api/IDVisitor';
+
+export const scanQRToken = async (token: string) => {
+    try {
+        const response = await axios.post(`${BACKEND_BASE_URL}/visitors/scan`, { token }, {
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+            },
+            timeout: 15000,
+        });
+        return response.data;
+    } catch (error) {
+        if (axios.isAxiosError(error) && error.response) {
+            return error.response.data;
+        }
+        throw error;
     }
 };
 

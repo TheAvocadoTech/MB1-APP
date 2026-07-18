@@ -1,36 +1,49 @@
-import { Image, Text, TouchableOpacity, View } from 'react-native'
+import { Image, TouchableOpacity, View } from 'react-native'
 import React from 'react'
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme } from '../../../../theme/ThemeProvider'
 import { useStyles } from './CabinatesTab.styles';
 import { ImageSource } from '../../../../constants/assets/images';
+import { default as Text } from '../../../../components/Text/MSText';
 
-const CabinatesTab = () => {
+interface CabinatesTabProps {
+    selectedCabinet: string | null;
+    onSelectCabinet: (cabinetName: string) => void;
+}
+
+const CabinatesTab = ({ selectedCabinet, onSelectCabinet }: CabinatesTabProps) => {
     const { colors } = useTheme();
     const styles = useStyles(colors);
-    const navigation = useNavigation<NativeStackNavigationProp<any>>();
-
-    const handlePressNavigateBtn = (cabinetName: string) => {
-        navigation.navigate('navigationScreen', { cabinetName });
-    }
 
     return (
         <View style={styles.cardContainer}>
             {
                 [1, 2, 3, 4, 5, 6].map((item, index) => {
-                    const cabinetName = `GR CL1R002${index + 1}`;
+                    const cabinetName = `GR CL1 R1 002${index + 1}`;
+                    const isSelected = selectedCabinet === cabinetName;
                     return (
-                        <View style={styles.card} key={index}>
+                        <TouchableOpacity 
+                            activeOpacity={0.8}
+                            style={[styles.card, isSelected && styles.activeCard]} 
+                            key={index}
+                            onPress={() => onSelectCabinet(cabinetName)}
+                        >
                             <View style={styles.leftSection}>
-                                <Image source={ImageSource.Menu} />
-                                <Text>{cabinetName}</Text>
+                                <Image 
+                                    source={ImageSource.Menu} 
+                                    style={[styles.cardIcon, isSelected && styles.activeCardIcon]} 
+                                />
+                                <Text style={[styles.cardText, isSelected && styles.activeCardText]} varient="medium">
+                                    {cabinetName}
+                                </Text>
                             </View>
 
-                            <TouchableOpacity onPress={() => handlePressNavigateBtn(cabinetName)}>
-                                <Image source={ImageSource.RightArrow} style={styles.navigateBtn} />
-                            </TouchableOpacity>
-                        </View>
+                            <View>
+                                <Image 
+                                    source={isSelected ? ImageSource.NavigateWhite : ImageSource.RightArrow} 
+                                    style={isSelected ? styles.selectedBtnIcon : styles.navigateBtn} 
+                                />
+                            </View>
+                        </TouchableOpacity>
                     );
                 })
             }

@@ -9,26 +9,30 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StyleSheet } from 'react-native';
+import { Provider } from 'react-redux';
+import { store } from './store/store';
 
 const Stack = createNativeStackNavigator();
-const initialRoute = "cameraScanner"
+const initialRoute = "splash"
 
 const App = () => {
     return (
-        <GestureHandlerRootView style={styles.container}>
-            <NavigationContainer>
-                <Stack.Navigator
-                    screenOptions={{ headerShown: false }}
-                    initialRouteName={initialRoute}
-                >
-                    <Stack.Screen name="splash" component={SplashScreen} />
-                    <Stack.Screen name="dashboard" component={DashboardScreen}/>
-                    <Stack.Screen name="scanQr" component={ScanQr} />
-                    <Stack.Screen name="cameraScanner" component={CameraScannerScreen} />
-                    <Stack.Screen name="navigationScreen" component={NavigationScreen} />
-                </Stack.Navigator>
+        <Provider store={store}>
+            <GestureHandlerRootView style={styles.container}>
+                <NavigationContainer>
+                    <Stack.Navigator
+                        screenOptions={{ headerShown: false }}
+                        initialRouteName={initialRoute}
+                    >
+                        <Stack.Screen name="splash" component={SplashScreen} />
+                        <Stack.Screen name="dashboard" component={DashboardScreen}/>
+                        <Stack.Screen name="scanQr" component={ScanQr} />
+                        <Stack.Screen name="cameraScanner" component={CameraScannerScreen} />
+                        <Stack.Screen name="navigationScreen" component={NavigationScreen} />
+                    </Stack.Navigator>
                 </NavigationContainer>
-        </GestureHandlerRootView>
+            </GestureHandlerRootView>
+        </Provider>
     )
 }
 
