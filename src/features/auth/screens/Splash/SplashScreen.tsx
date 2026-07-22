@@ -10,7 +10,7 @@ import { useDispatch } from 'react-redux';
 import AsyncStorage from '@react-native-community/async-storage';
 
 import { setCredentials, clearCredentials } from '../../../../store/slices/authSlice';
-import { scanQRToken, fetchVisitorDashboard } from '../../../../services/ApiUtility';
+import { fetchVisitorDashboard } from '../../../../services/ApiUtility';
 
 const SplashScreen = () => {
     const { colors } = useTheme();
@@ -97,5 +97,3 @@ const SplashScreen = () => {
 };
 
 export default SplashScreen;
-
-const styles = StyleSheet.create({});

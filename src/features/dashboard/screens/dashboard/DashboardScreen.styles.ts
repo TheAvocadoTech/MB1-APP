@@ -104,7 +104,7 @@ export const useStyles = (colors: ColorsType) =>
         },
         floatingButtonContainer: {
             position: 'absolute',
-            bottom: 30,
+            bottom: 90,
             left: 20,
             right: 20,
             zIndex: 20,

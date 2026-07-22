@@ -85,7 +85,7 @@ const CameraScannerScreen = () => {
 
                 scanQRToken(codeValue)
                     .then((res) => {
-                        console.log("This is the response of scanQr: ", codeValue);
+                        console.log("This is the response of scanQr: ", res);
                         setLoading(false);
                         if (res && res.success && res.isValid && res.data) {
                             // Save user token and details to AsyncStorage

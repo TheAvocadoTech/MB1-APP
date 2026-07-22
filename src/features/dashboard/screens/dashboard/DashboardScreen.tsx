@@ -14,7 +14,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import AsyncStorage from '@react-native-community/async-storage';
 import { clearCredentials, setCredentials } from '../../../../store/slices/authSlice';
 import { RootState } from '../../../../store/store';
-import { regenerateQR, fetchVisitorDashboard } from '../../../../services/ApiUtility';
+import { regenerateQR, fetchVisitorDashboard, fetchCabinetsList, fetchCabinetDetails } from '../../../../services/ApiUtility';
 
 const DashboardScreen = () => {
     const navigation = useNavigation<NativeStackNavigationProp<any>>();
@@ -27,6 +27,10 @@ const DashboardScreen = () => {
     const [selectedTab, setSelectedTab] = React.useState<'cabinets' | 'common'>('cabinets');
     const [selectedCabinet, setSelectedCabinet] = useState<string | null>(null);
 
+    // Dynamic cabinets list states
+    const [cabinets, setCabinets] = useState<any[]>([]);
+    const [loadingCabinets, setLoadingCabinets] = useState<boolean>(false);
+
     // Expiry timer and QR regeneration states
     const [timeRemaining, setTimeRemaining] = useState<number>(0);
     const [showTimeoutWarning, setShowTimeoutWarning] = useState<boolean>(false);
@@ -35,6 +39,18 @@ const DashboardScreen = () => {
 
     const { colors } = useTheme();
     const styles = useStyles(colors);
+
+    const handleSelectCabinet = async (cabinetName: string, cabinetId: string) => {
+        setSelectedCabinet(cabinetName);
+        if (!cabinetId) return;
+        try {
+            console.log('Fetching details for cabinet ID:', cabinetId);
+            const res = await fetchCabinetDetails(cabinetId);
+            console.log('Cabinet Details API Response ===>', JSON.stringify(res, null, 2));
+        } catch (error) {
+            console.log('Error fetching cabinet details:', error);
+        }
+    };
 
     // Sync initial QR token
     useEffect(() => {
@@ -61,6 +77,32 @@ const DashboardScreen = () => {
 
         fetchDashboardData();
     }, [token, dispatch]);
+
+    // Fetch cabinet list when cabinets tab is selected or visitor idNumber changes
+    useEffect(() => {
+        if (selectedTab === 'cabinets') {
+            const getCabinets = async () => {
+                setLoadingCabinets(true);
+                try {
+                    const idNumber = visitor?.idNumber || 'Tag1';
+                    console.log('Fetching cabinets list for ID:', idNumber);
+                    const res = await fetchCabinetsList(idNumber);
+                    console.log("Fetch cabinate >>>", res)
+                    if (res && res.success && res.cabinets) {
+                        setCabinets(res.cabinets);
+                    } else {
+                        setCabinets([]);
+                    }
+                } catch (error) {
+                    console.log('Error fetching cabinets:', error);
+                    setCabinets([]);
+                } finally {
+                    setLoadingCabinets(false);
+                }
+            };
+            getCabinets();
+        }
+    }, [selectedTab, visitor]);
 
     const handlePressTab = (type: 'cabinets' | 'common') => {
         setSelectedTab(type);
@@ -125,8 +167,8 @@ const DashboardScreen = () => {
         if (data && data.qrExpiresAt) {
             newExpiresAt = data.qrExpiresAt;
         } else {
-            // Fallback: Add 30 seconds to the current time
-            newExpiresAt = new Date(Date.now() + 30000).toISOString();
+            // Fallback: Add 3600 seconds (1 hour) to the current time
+            newExpiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
         }
 
         // Save updated session to AsyncStorage and Redux
@@ -240,7 +282,9 @@ const DashboardScreen = () => {
                         selectedTab === 'cabinets' ? (
                             <CabinatesTab 
                                 selectedCabinet={selectedCabinet}
-                                onSelectCabinet={setSelectedCabinet}
+                                onSelectCabinet={handleSelectCabinet}
+                                cabinets={cabinets}
+                                loadingCabinets={loadingCabinets}
                             />
                         ) : <CommonTab />
                     }
@@ -333,7 +377,7 @@ const DashboardScreen = () => {
                                 onPress={handleExtendSession}
                             >
                                 <Text style={styles.warningExtendButtonText} varient="medium">
-                                    30Sec EXTEND
+                                    1Hr EXTEND
                                 </Text>
                             </TouchableOpacity>
                         </View>

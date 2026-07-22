@@ -12,6 +12,15 @@ const api = axios.create({
     },
 });
 
+const publicApi = axios.create({
+    baseURL: 'https://api.avocadotech.in/',
+    timeout: 120000,
+    headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+    },
+});
+
 const apiFormData = axios.create({
     baseURL: 'https://api.avocadotech.in/',
     timeout: 120000,
@@ -155,6 +164,33 @@ export const fetchVisitorDashboard = async (token: string) => {
                 Authorization: `Bearer ${token}`,
             },
         });
+        return response.data;
+    } catch (error) {
+        if (axios.isAxiosError(error) && error.response) {
+            return error.response.data;
+        }
+        throw error;
+    }
+};
+
+export const fetchCabinetsList = async (idNumber: string) => {
+    try {
+        const response = await api.get('/api/cabinet/', {idNumber});
+        console.log("This is fetch cabinates list response ===>", response)
+        return response.data;
+    } catch (error) {
+        console.log("This is error>>>", error)
+        if (axios.isAxiosError(error) && error.response) {
+            return error.response.data;
+        }
+        throw error;
+    }
+};
+
+export const fetchCabinetDetails = async (cabinetId: string) => {
+    try {
+        const response = await api.get(`/api/cabinet/${cabinetId}`);
+        console.log("This is fetch cabinate details response ===>", response)
         return response.data;
     } catch (error) {
         if (axios.isAxiosError(error) && error.response) {
