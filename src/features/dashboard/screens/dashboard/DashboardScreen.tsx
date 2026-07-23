@@ -13,12 +13,13 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useDispatch, useSelector } from 'react-redux';
 import AsyncStorage from '@react-native-community/async-storage';
 import { clearCredentials, setCredentials } from '../../../../store/slices/authSlice';
-import { RootState } from '../../../../store/store';
-import { regenerateQR, fetchVisitorDashboard, fetchCabinetsList, fetchCabinetDetails } from '../../../../services/ApiUtility';
+import { RootState, AppDispatch } from '../../../../store/store';
+import { regenerateQR, fetchVisitorDashboard, fetchCabinetsList, updateVisitorCabinet } from '../../../../services/ApiUtility';
+import { getCabinetDetails, getVisitorAssignedCabinet, getVisitorLocation } from '../../../../store/slices/cabinetSlice';
 
 const DashboardScreen = () => {
     const navigation = useNavigation<NativeStackNavigationProp<any>>();
-    const dispatch = useDispatch();
+    const dispatch = useDispatch<AppDispatch>();
     
     // Redux auth details
     const { visitor, token } = useSelector((state: RootState) => state.auth);
@@ -43,12 +44,37 @@ const DashboardScreen = () => {
     const handleSelectCabinet = async (cabinetName: string, cabinetId: string) => {
         setSelectedCabinet(cabinetName);
         if (!cabinetId) return;
+        
         try {
             console.log('Fetching details for cabinet ID:', cabinetId);
-            const res = await fetchCabinetDetails(cabinetId);
-            console.log('Cabinet Details API Response ===>', JSON.stringify(res, null, 2));
+            
+            // Safely extract visitor ID (handle cases where it might be _id or nested in data)
+            const vis = visitor as any;
+            const visId = visitor?.id || vis?._id || vis?.visitor?.id || '6a61054d9407ddaf4317ed64';
+            const idNumber = 'Tag1';
+            
+            console.log('Updating visitor assigned cabinet on backend via PUT for visitor:', visId);
+            const putRes = await updateVisitorCabinet(visId, idNumber);
+            console.log('updateVisitorCabinet PUT Response:', JSON.stringify(putRes, null, 2));
+
+            if (putRes && putRes.success && putRes.data) {
+                // Sync visitor cabinet state in Redux and AsyncStorage
+                const updatedVisitor = { ...visitor, ...putRes.data };
+                dispatch(setCredentials({ token: token || '', visitor: updatedVisitor }));
+                await AsyncStorage.setItem('user_visitor', JSON.stringify(updatedVisitor));
+                console.log('Successfully updated visitor credentials in Redux and storage');
+            }
+
+            // Dispatch cabinet details regardless of visitor state
+            dispatch(getCabinetDetails(cabinetId));
+            
+            console.log('Dispatching APIs for visitor:', visId);
+            dispatch(getVisitorAssignedCabinet({ visitorId: visId, idNumber }));
+            dispatch(getVisitorLocation(visId));
+            
+            console.log('Successfully dispatched all cabinet data requests');
         } catch (error) {
-            console.log('Error fetching cabinet details:', error);
+            console.log('Error dispatching cabinet data requests:', error);
         }
     };
 
@@ -77,6 +103,15 @@ const DashboardScreen = () => {
 
         fetchDashboardData();
     }, [token, dispatch]);
+
+    // Fetch visitor location whenever visitor details are loaded or updated
+    useEffect(() => {
+        const visId = visitor?.id;
+        if (visId) {
+            console.log('Visitor ID available, fetching location path data for:', visId);
+            dispatch(getVisitorLocation(visId));
+        }
+    }, [visitor, dispatch]);
 
     // Fetch cabinet list when cabinets tab is selected or visitor idNumber changes
     useEffect(() => {

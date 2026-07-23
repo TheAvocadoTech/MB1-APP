@@ -175,7 +175,9 @@ export const fetchVisitorDashboard = async (token: string) => {
 
 export const fetchCabinetsList = async (idNumber: string) => {
     try {
-        const response = await publicApi.post('/api/cabinet/', {idNumber});
+        const response = await api.get('/api/cabinet/', {
+            params: { idNumber }
+        });
         console.log("This is fetch cabinates list response ===>", response)
         return response.data;
     } catch (error) {
@@ -189,8 +191,54 @@ export const fetchCabinetsList = async (idNumber: string) => {
 
 export const fetchCabinetDetails = async (cabinetId: string) => {
     try {
-        const response = await api.get(`/api/cabinet/${cabinetId}`);
+        console.log("This is cabinateId >>>", cabinetId)
+        const response = await publicApi.get(`/api/Cabinet/${cabinetId}`);
         console.log("This is fetch cabinate details response ===>", response)
+        return response.data;
+    } catch (error) {
+        if (axios.isAxiosError(error) && error.response) {
+            return error.response.data;
+        }
+        throw error;
+    }
+};
+export const fetchVisitorAssignedCabinet = async (visitorId: string, idNumber: string="Tag1") => {
+      console.log("This is url >>", `https://api.avocadotech.in/api/IDVisitor/visitors/${visitorId}/cabinet`)
+    try {
+        const response = await publicApi.put(`/api/IDVisitor/visitors/${visitorId}/cabinet`, {
+            data: { "idNumber" : "Tag1" } // Note: sending data in GET request
+        });
+      
+        console.log("This is fetch visitor assigned cabinet response ===>", response);
+        return response.data;
+    } catch (error) {
+        console.log("Error fetching in fetchVisitorAssignedCabinet >>>", error);
+        if (axios.isAxiosError(error) && error.response) {
+            return error.response.data;
+        }
+        throw error;
+    }
+};
+
+export const fetchVisitorLocation = async (visitorId: string) => {
+     console.log("This is location url  >>", `https://api.avocadotech.in/api/IDVisitor/visitors/${visitorId}/location`);
+    try {
+        const response = await publicApi.get(`/api/IDVisitor/visitors/${visitorId}/location`);
+       
+        console.log("This is fetch visitor location response ===>", response);
+        return response.data;
+    } catch (error) {
+        console.log("Error fetching in fetchVisitor location >>>", error);
+        if (axios.isAxiosError(error) && error.response) {
+            return error.response.data;
+        }
+        throw error;
+    }
+};
+
+export const updateVisitorCabinet = async (visitorId: string, idNumber: string) => {
+    try {
+        const response = await publicApi.put(`/api/IDVisitor/visitors/${visitorId}/cabinet`, { idNumber });
         return response.data;
     } catch (error) {
         if (axios.isAxiosError(error) && error.response) {

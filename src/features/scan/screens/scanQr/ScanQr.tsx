@@ -19,7 +19,7 @@ const ScanQr = () => {
     }
 
     return (
-        <SafeAreaView edges={["bottom", "top"]} style={{ flex: 1, backgroundColor: colors.background_primary, }}>
+        <SafeAreaView edges={["bottom", "top"]} style={{ flex: 1, backgroundColor: colors.background_primary }}>
             <ScrollView showsVerticalScrollIndicator={false}
                 contentContainerStyle={{ flexGrow: 1, paddingVertical: 20, justifyContent: "center", alignItems: "center" }}
             >

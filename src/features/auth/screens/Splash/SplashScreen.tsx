@@ -21,7 +21,7 @@ const SplashScreen = () => {
     useEffect(() => {
         let timer: any;
         const checkSession = async () => {
-            const STATIC_LOGIN = false; // Set to false to enable production QR scanner flow
+            const STATIC_LOGIN = true; // Set to false to enable production QR scanner flow
 
             if (STATIC_LOGIN) {
                 console.log('Static login is active. Logging in with mock details...');
@@ -46,18 +46,23 @@ const SplashScreen = () => {
 
             try {
                 const savedToken = await AsyncStorage.getItem('user_token');
+                const savedVisitorStr = await AsyncStorage.getItem('user_visitor');
 
                 if (savedToken) {
-                    console.log('Found saved token, fetching dashboard...');
-                    const res = await fetchVisitorDashboard(savedToken);
-
-                    if (res && res.success && res.data) {
-                        console.log('Session is valid, auto-logging in...');
-                        dispatch(setCredentials({ token: savedToken, visitor: res.data }));
-                        await AsyncStorage.setItem('user_visitor', JSON.stringify(res.data));
-                        navigation.replace('dashboard');
-                        return;
+                    console.log('Found saved token, auto-logging in with cached data...');
+                    
+                    let savedVisitor = null;
+                    if (savedVisitorStr) {
+                        try {
+                            savedVisitor = JSON.parse(savedVisitorStr);
+                        } catch (e) {
+                            console.log('Error parsing saved visitor:', e);
+                        }
                     }
+                    
+                    dispatch(setCredentials({ token: savedToken, visitor: savedVisitor }));
+                    navigation.replace('dashboard');
+                    return;
                 }
             } catch (error) {
                 console.log('Error verifying session:', error);

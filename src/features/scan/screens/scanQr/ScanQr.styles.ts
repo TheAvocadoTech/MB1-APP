@@ -28,7 +28,7 @@ export const useStyles = (colors: ColorsType) =>
             color: colors.primary
         },
         spacer: {
-            // flex: 1,
-            height: 169
+            flex: 1,
+            // height: 169
         }
     });
