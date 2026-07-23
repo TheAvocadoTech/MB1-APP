@@ -16,4 +16,5 @@ export const ImageSource = {
     WashRoom: require('../../../assets/Images/WashRoom.png'),
     DatacenterMap: require('../../../assets/Images/datacenter_map.jpg'),
     MapGlb: require('../../../assets/Images/1stFloor.glb'),
+    GrFloorGlb: require('../../../assets/Images/GRFloor.glb'),
 }

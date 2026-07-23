@@ -81,22 +81,41 @@ const HTML_3D_RENDERER = `
         const gridHelper = new THREE.GridHelper(50, 50, 0xE2D6DA, 0xEDEDED);
         scene.add(gridHelper);
 
+        let currentModel = null;
+
         window.loadModel = function(base64Data, cabinetName) {
             const loadingEl = document.getElementById('loading');
             if (loadingEl) loadingEl.style.display = 'none';
             
+            // Clean up previous model to prevent overlapping models and memory leaks
+            if (currentModel) {
+                scene.remove(currentModel);
+                currentModel.traverse(function(node) {
+                    if (node.isMesh) {
+                        if (node.geometry) node.geometry.dispose();
+                        if (Array.isArray(node.material)) {
+                            node.material.forEach(m => m.dispose());
+                        } else if (node.material) {
+                            node.material.dispose();
+                        }
+                    }
+                });
+                currentModel = null;
+            }
+
             const loader = new THREE.GLTFLoader();
             loader.load(base64Data, function(gltf) {
-                scene.add(gltf.scene);
+                currentModel = gltf.scene;
+                scene.add(currentModel);
                 
                 // Auto-center and scale model
-                const box = new THREE.Box3().setFromObject(gltf.scene);
+                const box = new THREE.Box3().setFromObject(currentModel);
                 const size = box.getSize(new THREE.Vector3());
                 const center = box.getCenter(new THREE.Vector3());
                 
-                gltf.scene.position.x += (gltf.scene.position.x - center.x);
-                gltf.scene.position.y += (gltf.scene.position.y - center.y);
-                gltf.scene.position.z += (gltf.scene.position.z - center.z);
+                currentModel.position.x += (currentModel.position.x - center.x);
+                currentModel.position.y += (currentModel.position.y - center.y);
+                currentModel.position.z += (currentModel.position.z - center.z);
                 
                 const maxDim = Math.max(size.x, size.y, size.z);
                 
@@ -243,13 +262,14 @@ const NavigationScreen = () => {
         }
     };
 
-    // Load initial GLB model file as base64 on mount
+    // Load GLB model file as base64 when selectedFloor changes
     useEffect(() => {
         const loadGLB = async () => {
+            setLoadingModel(true);
             try {
-                const asset = ImageSource.MapGlb;
+                const asset = selectedFloor === 'F1' ? ImageSource.GrFloorGlb : ImageSource.MapGlb;
                 const source = Image.resolveAssetSource(asset);
-                console.log('Fetching local GLB asset URI:', source.uri);
+                console.log('Fetching local GLB asset URI for floor', selectedFloor, ':', source.uri);
                 const response = await fetch(source.uri);
                 const blob = await response.blob();
                 
@@ -271,7 +291,7 @@ const NavigationScreen = () => {
         };
 
         loadGLB();
-    }, []);
+    }, [selectedFloor]);
 
     const handleWebViewLoadEnd = () => {
         if (modelBase64 && webViewRef.current) {

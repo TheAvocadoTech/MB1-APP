@@ -21,7 +21,7 @@ const SplashScreen = () => {
     useEffect(() => {
         let timer: any;
         const checkSession = async () => {
-            const STATIC_LOGIN = true; // Set to false to enable production QR scanner flow
+            const STATIC_LOGIN = false; // Set to false to enable production QR scanner flow
 
             if (STATIC_LOGIN) {
                 console.log('Static login is active. Logging in with mock details...');
@@ -89,8 +89,8 @@ const SplashScreen = () => {
     return (
         <SafeAreaView edges={['bottom', 'top']} style={styles.container}>
             <View style={styles.logoContainer}>
-                <Image source={ImageSource.Logo} />
-                <Image source={ImageSource.LogoName} />
+                <Image source={ImageSource.Logo} style={{width: 95, height: 50}}/>
+                <Image source={ImageSource.LogoName} style={{width: 240, height: 27}} />
             </View>
         </SafeAreaView>
     );

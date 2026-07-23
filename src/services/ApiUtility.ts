@@ -175,7 +175,7 @@ export const fetchVisitorDashboard = async (token: string) => {
 
 export const fetchCabinetsList = async (idNumber: string) => {
     try {
-        const response = await api.get('/api/cabinet/', {idNumber});
+        const response = await publicApi.post('/api/cabinet/', {idNumber});
         console.log("This is fetch cabinates list response ===>", response)
         return response.data;
     } catch (error) {

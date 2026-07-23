@@ -24,7 +24,7 @@ const ScanQr = () => {
                 contentContainerStyle={{ flexGrow: 1, paddingVertical: 20, justifyContent: "center", alignItems: "center" }}
             >
                 <View style={{ justifyContent: "center", alignItems: "center" }}>
-                    <Image source={ImageSource.ServerCloud} />
+                    <Image source={ImageSource.ServerCloud} style={{width: 193, height: 159}} />
                     <Image source={ImageSource.ServerMan} style={styles.serverMan} />
                 </View>
 

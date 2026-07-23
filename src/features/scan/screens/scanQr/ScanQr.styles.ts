@@ -4,7 +4,9 @@ import { ColorsType } from '../../../../constants/Ui/colors/colors.types';
 export const useStyles = (colors: ColorsType) =>
     StyleSheet.create({
         serverMan: {
-            marginTop: -60
+            marginTop: -60,
+            width: 334,
+            height: 403
         },
         logoContainer: {
             flexDirection: "row",
