@@ -60,6 +60,32 @@ export const useStyles = (colors: ColorsType) =>
             height: '100%',
             resizeMode: 'cover',
         },
+        coordinateInspector: {
+            position: 'absolute',
+            top: 16,
+            left: 16,
+            right: 16,
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+            borderRadius: 10,
+            backgroundColor: 'rgba(0, 38, 102, 0.88)',
+        },
+        coordinateInspectorTitle: {
+            color: '#A9D1FF',
+            fontSize: 12,
+            fontWeight: '700',
+        },
+        coordinateInspectorValue: {
+            color: '#FFFFFF',
+            fontSize: 14,
+            fontWeight: '700',
+            marginTop: 2,
+        },
+        coordinateInspectorHint: {
+            color: '#D8E9FF',
+            fontSize: 11,
+            marginTop: 3,
+        },
         routeOverlay: {
             ...StyleSheet.absoluteFillObject,
         },

@@ -17,4 +17,6 @@ export const ImageSource = {
     DatacenterMap: require('../../../assets/Images/datacenter_map.jpg'),
     MapGlb: require('../../../assets/Images/1stFloor.glb'),
     GrFloorGlb: require('../../../assets/Images/GRFloor.glb'),
+    GroundFloor2D: require('../../../assets/Images/2dGroundFloor.png'),
+    FirstFloor2D: require('../../../assets/Images/2dFirstFloor.png'),
 }

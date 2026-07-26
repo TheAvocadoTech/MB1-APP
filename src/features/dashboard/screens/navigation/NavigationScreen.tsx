@@ -12,6 +12,7 @@ import { ImageSource } from '../../../../constants/assets/images';
 import { useTheme } from '../../../../theme/ThemeProvider';
 import { useStyles } from './NavigationScreen.styles';
 
+/*
 const HTML_3D_RENDERER = `
 <!DOCTYPE html>
 <html>
@@ -71,6 +72,45 @@ const HTML_3D_RENDERER = `
             isAnimating = false;
         });
 
+        // Tap a visible model surface to obtain its GLB-local coordinate. This
+        // is used to calibrate API map nodes to the 3D model accurately.
+        const raycaster = new THREE.Raycaster();
+        const pointer = new THREE.Vector2();
+        let pointerDown = null;
+
+        function sendToNative(payload) {
+            if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify(payload));
+            }
+        }
+
+        renderer.domElement.addEventListener('pointerdown', function(event) {
+            pointerDown = { x: event.clientX, y: event.clientY };
+        });
+
+        renderer.domElement.addEventListener('pointerup', function(event) {
+            if (!currentModel || !pointerDown) return;
+            const movement = Math.hypot(event.clientX - pointerDown.x, event.clientY - pointerDown.y);
+            pointerDown = null;
+            if (movement > 8) return; // OrbitControls drag, not a coordinate pick.
+
+            const rect = renderer.domElement.getBoundingClientRect();
+            pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            raycaster.setFromCamera(pointer, camera);
+            const hit = raycaster.intersectObject(currentModel, true)[0];
+            if (!hit) return;
+
+            const localPoint = currentModel.worldToLocal(hit.point.clone());
+            sendToNative({
+                type: 'MODEL_COORDINATE',
+                x: localPoint.x,
+                y: localPoint.y,
+                z: localPoint.z,
+                meshName: hit.object.name || 'Unnamed mesh',
+            });
+        });
+
         // Lights
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
         scene.add(ambientLight);
@@ -80,12 +120,36 @@ const HTML_3D_RENDERER = `
         scene.add(dirLight);
 
         // Grid helper
-        const gridHelper = new THREE.GridHelper(50, 50, 0xE2D6DA, 0xEDEDED);
-        scene.add(gridHelper);
+        // const gridHelper = new THREE.GridHelper(50, 50, 0xE2D6DA, 0xEDEDED);
+        // scene.add(gridHelper);
 
         let currentModel = null;
         let modelShift = new THREE.Vector3(0, 0, 0);
+        let modelBounds = null;
+        let baseModelPosition = null;
+        let baseModelScale = null;
+        let fittedMapId = null;
         window.cachedPolyline = null;
+        window.cachedNavigationNodes = null;
+        window.navigationNodeObjects = [];
+
+        function disposeSceneObject(object) {
+            object.traverse(function(child) {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) {
+                    if (child.material.map) child.material.map.dispose();
+                    child.material.dispose();
+                }
+            });
+        }
+
+        window.clearNavigationNodes = function() {
+            window.navigationNodeObjects.forEach(function(object) {
+                scene.remove(object);
+                disposeSceneObject(object);
+            });
+            window.navigationNodeObjects = [];
+        };
 
         window.loadModel = function(base64Data, cabinetName) {
             const loadingEl = document.getElementById('loading');
@@ -93,6 +157,7 @@ const HTML_3D_RENDERER = `
             
             // Clean up previous model to prevent overlapping models and memory leaks
             if (currentModel) {
+                window.clearNavigationNodes();
                 scene.remove(currentModel);
                 currentModel.traverse(function(node) {
                     if (node.isMesh) {
@@ -105,6 +170,10 @@ const HTML_3D_RENDERER = `
                     }
                 });
                 currentModel = null;
+                modelBounds = null;
+                baseModelPosition = null;
+                baseModelScale = null;
+                fittedMapId = null;
             }
 
             const loader = new THREE.GLTFLoader();
@@ -151,6 +220,10 @@ const HTML_3D_RENDERER = `
                 currentModel.position.x += modelShift.x;
                 currentModel.position.y += modelShift.y;
                 currentModel.position.z += modelShift.z;
+                currentModel.updateMatrixWorld(true);
+                modelBounds = new THREE.Box3().setFromObject(currentModel);
+                baseModelPosition = currentModel.position.clone();
+                baseModelScale = currentModel.scale.clone();
                 
                 const maxDim = Math.max(size.x, size.y, size.z);
                 
@@ -171,6 +244,10 @@ const HTML_3D_RENDERER = `
                 if (window.cachedPolyline) {
                     const c = window.cachedPolyline;
                     window.drawPolyline(c.points, c.mapMeta);
+                }
+                if (window.cachedNavigationNodes) {
+                    const c = window.cachedNavigationNodes;
+                    window.drawNavigationNodes(c.nodes, c.routeNodeNames, c.mapMeta);
                 }
             }, undefined, function(error) {
                 if (loadingEl) loadingEl.innerText = 'Failed to load 3D Map';
@@ -208,14 +285,78 @@ const HTML_3D_RENDERER = `
         };
 
         window.convertPixelToWorld = function(pixelX, pixelY, mapMeta) {
-            const ppm = mapMeta.ppm || 50.0739;
-            const originX = mapMeta.origin_x || 306.45;
-            const originY = mapMeta.origin_y || 3856.48;
+            const ppm = Number(mapMeta.ppm);
+            const originX = Number(mapMeta.origin_x);
+            const originY = Number(mapMeta.origin_y);
+
+            if (!Number.isFinite(pixelX) || !Number.isFinite(pixelY) ||
+                !Number.isFinite(ppm) || ppm <= 0 ||
+                !Number.isFinite(originX) || !Number.isFinite(originY)) {
+                return null;
+            }
             
             const worldX = (pixelX - originX) / ppm;
             const worldZ = (originY - pixelY) / ppm;
             
             return { x: worldX, z: worldZ };
+        };
+
+        window.convertPixelToModel = function(pixelX, pixelY, mapMeta) {
+            const world = window.convertPixelToWorld(pixelX, pixelY, mapMeta);
+            return world
+                ? {
+                    x: world.x,
+                    // Draw on a dedicated layer above the tallest GLB mesh.
+                    // This guarantees the route is never buried below a floor
+                    // slab after the model has been calibrated to map bounds.
+                    y: modelBounds ? modelBounds.max.y + 1.25 : 0.8 + modelShift.y,
+                    z: world.z,
+                }
+                : null;
+        };
+
+        window.fitModelToMap = function(mapMeta) {
+            if (!currentModel || !baseModelPosition || !baseModelScale) return false;
+
+            const mapWidth = Number(mapMeta.width);
+            const mapHeight = Number(mapMeta.height);
+            const mapId = String(mapMeta.id || mapMeta.name || 'active-map');
+            const mapBottomLeft = window.convertPixelToWorld(0, mapHeight, mapMeta);
+            const mapTopRight = window.convertPixelToWorld(mapWidth, 0, mapMeta);
+
+            if (!mapBottomLeft || !mapTopRight || !Number.isFinite(mapWidth) || mapWidth <= 0 ||
+                !Number.isFinite(mapHeight) || mapHeight <= 0) return false;
+            if (fittedMapId === mapId) return true;
+
+            // Reset first: a floor can be re-used for a different API map.
+            currentModel.position.copy(baseModelPosition);
+            currentModel.scale.copy(baseModelScale);
+            currentModel.updateMatrixWorld(true);
+
+            const sourceBounds = new THREE.Box3().setFromObject(currentModel);
+            const sourceSize = sourceBounds.getSize(new THREE.Vector3());
+            const targetWidth = mapTopRight.x - mapBottomLeft.x;
+            const targetDepth = mapTopRight.z - mapBottomLeft.z;
+
+            if (sourceSize.x <= 0 || sourceSize.z <= 0 || targetWidth <= 0 || targetDepth <= 0) return false;
+
+            // Scale and translate the GLB to the same meter coordinate system
+            // returned by the API. The route can then use API node positions
+            // directly, without stretching or re-shaping the polyline.
+            currentModel.scale.set(
+                baseModelScale.x * (targetWidth / sourceSize.x),
+                baseModelScale.y,
+                baseModelScale.z * (targetDepth / sourceSize.z),
+            );
+            currentModel.updateMatrixWorld(true);
+
+            const scaledBounds = new THREE.Box3().setFromObject(currentModel);
+            currentModel.position.x += mapBottomLeft.x - scaledBounds.min.x;
+            currentModel.position.z += mapBottomLeft.z - scaledBounds.min.z;
+            currentModel.updateMatrixWorld(true);
+            modelBounds = new THREE.Box3().setFromObject(currentModel);
+            fittedMapId = mapId;
+            return true;
         };
 
         window.drawPolyline = function(points, mapMeta) {
@@ -231,7 +372,8 @@ const HTML_3D_RENDERER = `
             }
             window.currentPathLines = [];
 
-            if (!points || points.length < 2 || !mapMeta) return;
+            if (!points || points.length < 2 || !mapMeta || !currentModel) return;
+            if (!window.fitModelToMap(mapMeta)) return;
 
             // Define custom Curve for TubeGeometry
             class SegmentCurve extends THREE.Curve {
@@ -247,23 +389,141 @@ const HTML_3D_RENDERER = `
             }
 
             // Convert points to 3D world coordinates and shift them relative to the centered model
-            const convertedPoints = points.map(pt => {
-                const world = window.convertPixelToWorld(pt.x, pt.y, mapMeta);
-                return new THREE.Vector3(world.x + modelShift.x, 0.3 + modelShift.y, world.z + modelShift.z);
-            });
+            const convertedPoints = points
+                .map(pt => {
+                    const modelPoint = window.convertPixelToModel(Number(pt.x), Number(pt.y), mapMeta);
+                    return modelPoint
+                        ? new THREE.Vector3(modelPoint.x, modelPoint.y, modelPoint.z)
+                        : null;
+                })
+                .filter(Boolean);
+
+            if (convertedPoints.length < 2) return;
 
             for (let i = 0; i < convertedPoints.length - 1; i++) {
                 const startPoint = convertedPoints[i];
                 const endPoint = convertedPoints[i+1];
                 
                 const curve = new SegmentCurve(startPoint, endPoint);
-                const tubeGeom = new THREE.TubeGeometry(curve, 10, 0.25, 8, false); // Radius 0.25 for clear thick path tube
-                const tubeMat = new THREE.MeshBasicMaterial({ color: 0x00A3FF, transparent: true, opacity: 0.8 });
-                
-                const tubeMesh = new THREE.Mesh(tubeGeom, tubeMat);
-                scene.add(tubeMesh);
-                window.currentPathLines.push(tubeMesh);
+                // Keep the path above the floor and draw it last so the GLB's
+                // floor/ceiling meshes cannot hide it from the camera.
+                const glowGeometry = new THREE.TubeGeometry(curve, 16, 0.48, 8, false);
+                const glowMaterial = new THREE.MeshBasicMaterial({
+                    color: 0x006DFF,
+                    transparent: true,
+                    opacity: 0.28,
+                    depthTest: false,
+                    depthWrite: false,
+                });
+                const pathGeometry = new THREE.TubeGeometry(curve, 16, 0.25, 8, false);
+                const pathMaterial = new THREE.MeshBasicMaterial({
+                    color: 0x006DFF,
+                    transparent: true,
+                    opacity: 1,
+                    depthTest: false,
+                    depthWrite: false,
+                });
+
+                const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+                const pathMesh = new THREE.Mesh(pathGeometry, pathMaterial);
+                glowMesh.renderOrder = 999;
+                pathMesh.renderOrder = 1000;
+                glowMesh.frustumCulled = false;
+                pathMesh.frustumCulled = false;
+                scene.add(glowMesh, pathMesh);
+                window.currentPathLines.push(glowMesh, pathMesh);
             }
+
+            // Visible start/end anchors also make a very short route (such as
+            // the supplied 119 px "Close" route) easy to spot on the model.
+            [convertedPoints[0], convertedPoints[convertedPoints.length - 1]].forEach((point, index) => {
+                const marker = new THREE.Mesh(
+                    new THREE.SphereGeometry(index === 0 ? 0.75 : 0.95, 16, 16),
+                    new THREE.MeshBasicMaterial({
+                        color: 0x006DFF,
+                        depthTest: false,
+                        depthWrite: false,
+                    }),
+                );
+                marker.position.copy(point);
+                marker.renderOrder = 1001;
+                marker.frustumCulled = false;
+                scene.add(marker);
+                window.currentPathLines.push(marker);
+            });
+
+            // Center the 3D camera on the route. This makes a valid route
+            // immediately visible even when the model has been panned to a
+            // cabinet or the route lies near the edge of the floor plan.
+            const routeBounds = new THREE.Box3().setFromPoints(convertedPoints);
+            const routeCenter = routeBounds.getCenter(new THREE.Vector3());
+            const routeSize = routeBounds.getSize(new THREE.Vector3());
+            const routeSpan = Math.max(routeSize.x, routeSize.z, 12);
+            targetLookAt.copy(routeCenter);
+            targetCameraPos.set(
+                routeCenter.x,
+                routeCenter.y + routeSpan * 1.2,
+                routeCenter.z + routeSpan * 1.5,
+            );
+            isAnimating = true;
+        };
+
+        function createNodeLabel(name) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 160;
+            canvas.height = 48;
+            const context = canvas.getContext('2d');
+            context.fillStyle = 'rgba(0, 24, 58, 0.88)';
+            context.fillRect(0, 0, 160, 48);
+            context.fillStyle = '#FFFFFF';
+            context.font = 'bold 26px sans-serif';
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.fillText(name, 80, 25);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+                map: texture,
+                depthTest: false,
+                depthWrite: false,
+            }));
+            sprite.scale.set(3.5, 1.05, 1);
+            sprite.renderOrder = 1002;
+            return sprite;
+        }
+
+        window.drawNavigationNodes = function(nodes, routeNodeNames, mapMeta) {
+            window.cachedNavigationNodes = { nodes, routeNodeNames, mapMeta };
+            window.clearNavigationNodes();
+
+            if (!currentModel || !Array.isArray(nodes) || !mapMeta || !window.fitModelToMap(mapMeta)) return;
+
+            const activeRouteNodes = new Set(routeNodeNames || []);
+            nodes.forEach(function(node) {
+                const position = node && node.position;
+                const modelPoint = position && window.convertPixelToModel(Number(position.x), Number(position.y), mapMeta);
+                if (!modelPoint) return;
+
+                const isOnRoute = activeRouteNodes.has(node.name);
+                const marker = new THREE.Mesh(
+                    new THREE.SphereGeometry(isOnRoute ? 0.55 : 0.38, 16, 16),
+                    new THREE.MeshBasicMaterial({
+                        color: isOnRoute ? 0x006DFF : 0xFFB000,
+                        depthTest: false,
+                        depthWrite: false,
+                    }),
+                );
+                marker.position.set(modelPoint.x, modelPoint.y + 0.2, modelPoint.z);
+                marker.renderOrder = 1001;
+                marker.frustumCulled = false;
+
+                const label = createNodeLabel(node.name || 'Node');
+                label.position.set(modelPoint.x, modelPoint.y + 1.45, modelPoint.z);
+                label.frustumCulled = false;
+
+                scene.add(marker, label);
+                window.navigationNodeObjects.push(marker, label);
+            });
         };
 
         window.zoomIn = function() {
@@ -306,6 +566,480 @@ const HTML_3D_RENDERER = `
 </body>
 </html>
 `;
+*/
+
+const HTML_2D_RENDERER = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+    <style>
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #FFFFFF; }
+        #viewport { width: 100%; height: 100%; position: relative; cursor: grab; }
+        svg { position: absolute; top: 0; left: 0; transform-origin: 0 0; will-change: transform; }
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-family: sans-serif; font-size: 16px; color: #87848A; }
+    </style>
+</head>
+<body>
+    <div id="loading">Loading 2D Map...</div>
+    <div id="viewport">
+        <svg id="map-svg" viewBox="0 0 600 900" width="600" height="900">
+            <defs>
+                <marker id="routeArrow" markerWidth="3" markerHeight="3" refX="2" refY="1.5" orient="auto">
+                    <path d="M 0 0 L 3 1.5 L 0 3 z" fill="#0085ff" />
+                </marker>
+                <marker id="proposedRouteArrow" markerWidth="3" markerHeight="3" refX="2" refY="1.5" orient="auto">
+                    <path d="M 0 0 L 3 1.5 L 0 3 z" fill="#062835" />
+                </marker>
+                <pattern id="gridPattern" width="40" height="40" patternUnits="userSpaceOnUse">
+                    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#cbd5e1" stroke-width="0.8" opacity="0.4" />
+                </pattern>
+            </defs>
+            <g transform="translate(0, 900) rotate(-90)">
+                <rect width="900" height="600" fill="#f1f5f9" />
+                <rect width="900" height="600" fill="url(#gridPattern)" />
+                <rect x="35" y="35" width="830" height="530" fill="#ffffff" stroke="#cbd5e1" stroke-width="2.5" rx="18" />
+                <g id="image-calibration-group">
+                    <image id="map-image" x="35" y="35" width="830" height="530" preserveAspectRatio="none" />
+                </g>
+                <g id="edges-group"></g>
+                <g id="polyline-group"></g>
+                <g id="nodes-group"></g>
+            </g>
+        </svg>
+    </div>
+
+    <script>
+        (function() {
+            const logOriginal = console.log;
+            console.log = function() {
+                logOriginal.apply(console, arguments);
+                if (window.ReactNativeWebView) {
+                    window.ReactNativeWebView.postMessage(JSON.stringify({
+                        type: 'LOG',
+                        message: Array.from(arguments).map(x => typeof x === 'object' ? JSON.stringify(x) : x).join(' ')
+                    }));
+                }
+            };
+            const errorOriginal = console.error;
+            console.error = function() {
+                errorOriginal.apply(console, arguments);
+                if (window.ReactNativeWebView) {
+                    window.ReactNativeWebView.postMessage(JSON.stringify({
+                        type: 'ERROR',
+                        message: Array.from(arguments).map(x => typeof x === 'object' ? JSON.stringify(x) : x).join(' ')
+                    }));
+                }
+            };
+        })();
+
+        const svg = document.getElementById('map-svg');
+        const viewport = document.getElementById('viewport');
+        const mapImage = document.getElementById('map-image');
+        const loading = document.getElementById('loading');
+
+        let scale = 3.2;
+        let pointX = -320;
+        let pointY = 0;
+        let start = { x: 0, y: 0 };
+        let isPanning = false;
+
+        const SVG_WIDTH = 900;
+        const SVG_HEIGHT = 600;
+
+        const FLOORPLAN_CALIBRATION = {
+            GR: { rotation: 0, scale: 0.9, offsetX: -15, offsetY: 0 },
+            F1: { rotation: 0, scale: 0.9, offsetX: -12, offsetY: 0 }
+        };
+
+        const LIFT_COORDINATES = { x: 5220.46912942509, y: 1681.3904907165097 };
+        const F1_LIFT_COORDINATES = { x: 5720.46912942509, y: 1681.3904907165097 };
+        const CABINET_COORDINATES = { x: 5620.3, y: 2200.84 };
+        const TEMP_DOT_COORDINATES = { x: 5480.0, y: 2200.84 };
+        const GR_PROPOSED_START_COORDINATES = { x: 5700.0, y: 1448.69 };
+
+        function setTransform() {
+            svg.style.transform = "translate(" + pointX + "px, " + pointY + "px) scale(" + scale + ")";
+        }
+
+        function transformCoords(x, y, mapWidth, mapHeight) {
+            if (x === undefined || y === undefined || x === null || y === null) {
+                return { svgX: SVG_WIDTH / 2, svgY: SVG_HEIGHT / 2 };
+            }
+            const padding = 50;
+            const scaleX = (SVG_WIDTH - padding * 2) / mapWidth;
+            const scaleY = (SVG_HEIGHT - padding * 2) / mapHeight;
+            const uScale = Math.min(scaleX, scaleY);
+            const offsetX = (SVG_WIDTH - mapWidth * uScale) / 2;
+            const offsetY = (SVG_HEIGHT - mapHeight * uScale) / 2;
+            return { svgX: offsetX + x * uScale, svgY: offsetY + y * uScale };
+        }
+
+        function normalizeGraphNodes(rawNodes) {
+            if (!rawNodes) return [];
+            let list = Array.isArray(rawNodes) ? rawNodes : Object.keys(rawNodes).map(k => Object.assign({ name: rawNodes[k].name || rawNodes[k].id || k }, rawNodes[k]));
+            return list.map((item, idx) => {
+                const name = item.name || item.id || ("N" + (idx + 1));
+                let posX = item.position?.x ?? item.x;
+                let posY = item.position?.y ?? item.y;
+                return {
+                    name,
+                    position: (posX !== undefined && !isNaN(posX) && posY !== undefined && !isNaN(posY)) ? { x: Number(posX), y: Number(posY) } : null,
+                    edges: item.edges || item.connections || {}
+                };
+            }).filter(n => n.position !== null);
+        }
+
+        function extractWaypoints(rawRoute) {
+            if (!rawRoute) return [];
+            let list = Array.isArray(rawRoute) ? rawRoute : (rawRoute.nodes || rawRoute.waypoints || rawRoute.path || Object.values(rawRoute));
+            if (!Array.isArray(list) && typeof list === 'object') list = Object.values(list);
+            return list.map(item => {
+                if (!item) return null;
+                let posX = Array.isArray(item) ? item[0] : (item.position?.x ?? item.x);
+                let posY = Array.isArray(item) ? item[1] : (item.position?.y ?? item.y);
+                return (posX !== undefined && !isNaN(posX) && posY !== undefined && !isNaN(posY)) ? { x: Number(posX), y: Number(posY) } : null;
+            }).filter(pt => pt !== null);
+        }
+
+        window.loadModel = function(payload) {
+            if (!payload) return;
+            loading.style.display = 'none';
+            if (payload.modelBase64) mapImage.setAttribute('href', payload.modelBase64);
+            const floor = payload.floor || 'GR';
+            const calib = FLOORPLAN_CALIBRATION[floor] || FLOORPLAN_CALIBRATION.GR;
+            const imageGroup = document.getElementById('image-calibration-group');
+            if (imageGroup) {
+                imageGroup.setAttribute('transform', 'translate(' + (SVG_WIDTH / 2 + calib.offsetX) + ', ' + (SVG_HEIGHT / 2 + calib.offsetY) + ') rotate(' + calib.rotation + ') scale(' + calib.scale + ') translate(' + (-SVG_WIDTH / 2) + ', ' + (-SVG_HEIGHT / 2) + ')');
+            }
+            setTransform();
+            renderMapElements(payload);
+        };
+
+        function renderMapElements(payload) {
+            const floor = payload.floor || 'GR';
+            const visitorLocation = payload.visitorLocation;
+            const mapMeta = visitorLocation?.map || { width: 6400, height: 5120 };
+            const mapWidth = mapMeta.width || 6400;
+            const mapHeight = mapMeta.height || 5120;
+            const activeWayfinding = visitorLocation?.wayfinding;
+            const activeRoute = visitorLocation?.wayfinding?.route_to_destination;
+
+            const getSvgCoords = (x, y) => transformCoords(x, y, mapWidth, mapHeight);
+
+            const rawNodes = activeWayfinding?.nodes || mapMeta?.wayfinding_path?.nodes || [];
+            const allGraphNodes = normalizeGraphNodes(rawNodes);
+
+            const edgesGroup = document.getElementById('edges-group');
+            if (edgesGroup) {
+                edgesGroup.innerHTML = '';
+                const nodeMap = new Map();
+                allGraphNodes.forEach(n => { if (n.name && n.position) nodeMap.set(n.name, getSvgCoords(n.position.x, n.position.y)); });
+                const drawn = new Set();
+                allGraphNodes.forEach(n => {
+                    const srcPt = nodeMap.get(n.name);
+                    if (srcPt && n.edges) {
+                        Object.keys(n.edges).forEach(tName => {
+                            const tgtPt = nodeMap.get(tName);
+                            const edgeKey = [n.name, tName].sort().join("---");
+                            if (tgtPt && !drawn.has(edgeKey)) {
+                                drawn.add(edgeKey);
+                                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                                line.setAttribute('x1', srcPt.svgX); line.setAttribute('y1', srcPt.svgY);
+                                line.setAttribute('x2', tgtPt.svgX); line.setAttribute('y2', tgtPt.svgY);
+                                line.setAttribute('stroke', '#cbd5e1'); line.setAttribute('stroke-width', '2');
+                                line.setAttribute('stroke-dasharray', '4 4');
+                                edgesGroup.appendChild(line);
+                            }
+                        });
+                    }
+                });
+            }
+
+            const nodesGroup = document.getElementById('nodes-group');
+            if (nodesGroup) {
+                nodesGroup.innerHTML = '';
+                allGraphNodes.forEach((n, idx) => {
+                    if (!n.position) return;
+                    const pt = getSvgCoords(n.position.x, n.position.y);
+                    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    c.setAttribute('cx', pt.svgX); c.setAttribute('cy', pt.svgY); c.setAttribute('r', '4');
+                    c.setAttribute('fill', '#334155'); c.setAttribute('stroke', '#ffffff'); c.setAttribute('stroke-width', '1.2');
+                    g.appendChild(c);
+                    if (n.name) {
+                        const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        t.setAttribute('x', pt.svgX); t.setAttribute('y', pt.svgY + 12);
+                        t.setAttribute('fill', '#1e293b'); t.setAttribute('font-size', '8px');
+                        t.setAttribute('font-weight', '800'); t.setAttribute('text-anchor', 'middle');
+                        t.textContent = n.name;
+                        g.appendChild(t);
+                    }
+                    nodesGroup.appendChild(g);
+                });
+            }
+
+            const polylineGroup = document.getElementById('polyline-group');
+            if (polylineGroup) {
+                polylineGroup.innerHTML = '';
+                const bleLoc = visitorLocation?.location || { x: 5004.59, y: 2313.4 };
+                const blePos = getSvgCoords(bleLoc.x, bleLoc.y);
+                const startPos = floor === "F1" ? getSvgCoords(F1_LIFT_COORDINATES.x, F1_LIFT_COORDINATES.y) : getSvgCoords(bleLoc.x, bleLoc.y);
+                const destPos = floor === "GR" ? getSvgCoords(LIFT_COORDINATES.x, LIFT_COORDINATES.y) : getSvgCoords(CABINET_COORDINATES.x, CABINET_COORDINATES.y);
+
+                if (floor === "F1") {
+                    const tempPt = getSvgCoords(TEMP_DOT_COORDINATES.x, TEMP_DOT_COORDINATES.y);
+                    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    c.setAttribute('cx', tempPt.svgX); c.setAttribute('cy', tempPt.svgY); c.setAttribute('r', '4');
+                    c.setAttribute('fill', '#0085ff'); c.setAttribute('stroke', '#ffffff'); c.setAttribute('stroke-width', '1.2');
+                    polylineGroup.appendChild(c);
+                }
+
+                if (floor === "GR") {
+                    const propStart = getSvgCoords(GR_PROPOSED_START_COORDINATES.x, GR_PROPOSED_START_COORDINATES.y);
+                    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    const aura = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    aura.setAttribute('cx', propStart.svgX); aura.setAttribute('cy', propStart.svgY); aura.setAttribute('r', '6');
+                    aura.setAttribute('fill', '#38bdf8'); aura.setAttribute('opacity', '0.4'); g.appendChild(aura);
+                    const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    dot.setAttribute('cx', propStart.svgX); dot.setAttribute('cy', propStart.svgY); dot.setAttribute('r', '4');
+                    dot.setAttribute('fill', '#38bdf8'); dot.setAttribute('stroke', '#ffffff'); dot.setAttribute('stroke-width', '0.8'); g.appendChild(dot);
+                    polylineGroup.appendChild(g);
+                }
+
+                const rawWaypoints = activeRoute?.nodes || activeRoute?.path || activeRoute?.waypoints || [];
+                const backendWaypoints = extractWaypoints(rawWaypoints);
+
+                const refPts = [];
+                if (floor === "F1") {
+                    refPts.push(startPos);
+                    const n48 = allGraphNodes.find(n => n.name && (n.name.toUpperCase() === "N48" || n.name === "48"));
+                    refPts.push(n48?.position ? getSvgCoords(n48.position.x, n48.position.y) : getSvgCoords(5454.1586, 1711.6878));
+                    refPts.push(getSvgCoords(TEMP_DOT_COORDINATES.x, TEMP_DOT_COORDINATES.y));
+                    refPts.push(destPos);
+                } else {
+                    refPts.push(startPos);
+                    backendWaypoints.forEach(pt => refPts.push(getSvgCoords(pt.x, pt.y)));
+                    refPts.push(destPos);
+                }
+
+                if (refPts.length >= 2) {
+                    const pathD = refPts.reduce((acc, pt, idx) => idx === 0 ? 'M ' + pt.svgX + ' ' + pt.svgY : acc + ' L ' + pt.svgX + ' ' + pt.svgY, '');
+                    const pathBg = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    pathBg.setAttribute('d', pathD); pathBg.setAttribute('fill', 'none');
+                    pathBg.setAttribute('stroke', floor === "F1" ? "rgba(6, 40, 53, 0.25)" : "rgba(0, 133, 255, 0.2)");
+                    pathBg.setAttribute('stroke-width', '6'); pathBg.setAttribute('stroke-linecap', 'round'); pathBg.setAttribute('stroke-linejoin', 'round');
+                    polylineGroup.appendChild(pathBg);
+
+                    const pathFg = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    pathFg.setAttribute('d', pathD); pathFg.setAttribute('fill', 'none');
+                    pathFg.setAttribute('stroke', floor === "F1" ? "#062835" : "#0085ff");
+                    pathFg.setAttribute('stroke-width', '3'); pathFg.setAttribute('stroke-linecap', 'round'); pathFg.setAttribute('stroke-linejoin', 'round');
+                    if (floor === "F1") {
+                        pathFg.setAttribute('stroke-dasharray', '6 6'); pathFg.setAttribute('marker-end', 'url(#proposedRouteArrow)');
+                    } else {
+                        pathFg.setAttribute('marker-end', 'url(#routeArrow)');
+                    }
+                    polylineGroup.appendChild(pathFg);
+                }
+
+                if (floor === "GR") {
+                    const propPts = [];
+                    propPts.push(getSvgCoords(GR_PROPOSED_START_COORDINATES.x, GR_PROPOSED_START_COORDINATES.y));
+                    const n9 = allGraphNodes.find(n => n.name && (n.name.toUpperCase() === "N9" || n.name === "9"));
+                    propPts.push(n9?.position ? getSvgCoords(n9.position.x, n9.position.y) : getSvgCoords(5854.67, 3646.69));
+                    const n13 = allGraphNodes.find(n => n.name && (n.name.toUpperCase() === "N13" || n.name === "13"));
+                    propPts.push(n13?.position ? getSvgCoords(n13.position.x, n13.position.y) : getSvgCoords(6362.34, 3470.36));
+                    propPts.push(destPos);
+
+                    if (propPts.length >= 2) {
+                        const pathD = propPts.reduce((acc, pt, idx) => idx === 0 ? 'M ' + pt.svgX + ' ' + pt.svgY : acc + ' L ' + pt.svgX + ' ' + pt.svgY, '');
+                        const pathBg = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        pathBg.setAttribute('d', pathD); pathBg.setAttribute('fill', 'none'); pathBg.setAttribute('stroke', 'rgba(56, 189, 248, 0.25)');
+                        pathBg.setAttribute('stroke-width', '6'); pathBg.setAttribute('stroke-linecap', 'round'); pathBg.setAttribute('stroke-linejoin', 'round');
+                        polylineGroup.appendChild(pathBg);
+
+                        const pathFg = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        pathFg.setAttribute('d', pathD); pathFg.setAttribute('fill', 'none'); pathFg.setAttribute('stroke', '#062835');
+                        pathFg.setAttribute('stroke-width', '3'); pathFg.setAttribute('stroke-linecap', 'round'); pathFg.setAttribute('stroke-linejoin', 'round');
+                        pathFg.setAttribute('stroke-dasharray', '6 6'); pathFg.setAttribute('marker-end', 'url(#proposedRouteArrow)');
+                        polylineGroup.appendChild(pathFg);
+                    }
+                }
+
+                if (floor === "F1") {
+                    const f1Pts = [];
+                    f1Pts.push(blePos);
+                    backendWaypoints.forEach(pt => f1Pts.push(getSvgCoords(pt.x, pt.y)));
+                    f1Pts.push(destPos);
+
+                    if (f1Pts.length >= 2) {
+                        const pathD = f1Pts.reduce((acc, pt, idx) => idx === 0 ? 'M ' + pt.svgX + ' ' + pt.svgY : acc + ' L ' + pt.svgX + ' ' + pt.svgY, '');
+                        const pathBg = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        pathBg.setAttribute('d', pathD); pathBg.setAttribute('fill', 'none'); pathBg.setAttribute('stroke', 'rgba(0, 133, 255, 0.2)');
+                        pathBg.setAttribute('stroke-width', '6'); pathBg.setAttribute('stroke-linecap', 'round'); pathBg.setAttribute('stroke-linejoin', 'round');
+                        polylineGroup.appendChild(pathBg);
+
+                        const pathFg = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        pathFg.setAttribute('d', pathD); pathFg.setAttribute('fill', 'none'); pathFg.setAttribute('stroke', '#0085ff');
+                        pathFg.setAttribute('stroke-width', '3'); pathFg.setAttribute('stroke-linecap', 'round'); pathFg.setAttribute('stroke-linejoin', 'round');
+                        pathFg.setAttribute('marker-end', 'url(#routeArrow)');
+                        polylineGroup.appendChild(pathFg);
+                    }
+                }
+
+                if (blePos) {
+                    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    const aura = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    aura.setAttribute('cx', blePos.svgX); aura.setAttribute('cy', blePos.svgY); aura.setAttribute('r', '8');
+                    aura.setAttribute('fill', '#0085ff'); aura.setAttribute('opacity', '0.3'); g.appendChild(aura);
+                    const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    dot.setAttribute('cx', blePos.svgX); dot.setAttribute('cy', blePos.svgY); dot.setAttribute('r', '4');
+                    dot.setAttribute('fill', '#0085ff'); dot.setAttribute('stroke', '#ffffff'); dot.setAttribute('stroke-width', '0.5'); g.appendChild(dot);
+                    const center = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    center.setAttribute('cx', blePos.svgX); center.setAttribute('cy', blePos.svgY); center.setAttribute('r', '1');
+                    center.setAttribute('fill', '#ffffff'); g.appendChild(center);
+                    polylineGroup.appendChild(g);
+                }
+
+                if (destPos) {
+                    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    g.setAttribute('transform', 'translate(' + destPos.svgX + ',' + destPos.svgY + ')');
+                    const aura = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    aura.setAttribute('r', '8'); aura.setAttribute('fill', floor === "GR" ? '#9333ea' : '#ea580c'); aura.setAttribute('opacity', '0.3'); g.appendChild(aura);
+                    const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    dot.setAttribute('r', '5'); dot.setAttribute('fill', floor === "GR" ? '#9333ea' : '#ea580c'); dot.setAttribute('stroke', '#ffffff'); dot.setAttribute('stroke-width', '0.5'); g.appendChild(dot);
+
+                    if (floor === "GR") {
+                        const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        t.setAttribute('x', '0'); t.setAttribute('y', '2.5'); t.setAttribute('fill', '#ffffff'); t.setAttribute('font-size', '7.5px'); t.setAttribute('text-anchor', 'middle');
+                        t.textContent = '🛗'; g.appendChild(t);
+                    } else {
+                        if (startPos) {
+                            const lg = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                            lg.setAttribute('transform', 'translate(' + startPos.svgX + ',' + startPos.svgY + ')');
+                            const laura = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                            laura.setAttribute('r', '8'); laura.setAttribute('fill', '#9333ea'); laura.setAttribute('opacity', '0.25'); lg.appendChild(laura);
+                            const ldot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                            ldot.setAttribute('r', '5'); ldot.setAttribute('fill', '#9333ea'); ldot.setAttribute('stroke', '#ffffff'); ldot.setAttribute('stroke-width', '0.5'); lg.appendChild(ldot);
+                            const lt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                            lt.setAttribute('x', '0'); lt.setAttribute('y', '2.5'); lt.setAttribute('fill', '#ffffff'); lt.setAttribute('font-size', '7.5px'); lt.setAttribute('text-anchor', 'middle');
+                            lt.textContent = '🛗'; lg.appendChild(lt);
+                            polylineGroup.appendChild(lg);
+                        }
+                        const center = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                        center.setAttribute('r', '2'); center.setAttribute('fill', '#ffffff'); g.appendChild(center);
+                    }
+                    polylineGroup.appendChild(g);
+                }
+            }
+        }
+
+        viewport.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            start = { x: e.clientX - pointX, y: e.clientY - pointY };
+            isPanning = true;
+            viewport.style.cursor = 'grabbing';
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isPanning) return;
+            pointX = e.clientX - start.x;
+            pointY = e.clientY - start.y;
+            setTransform();
+        });
+
+        window.addEventListener('mouseup', () => {
+            isPanning = false;
+            viewport.style.cursor = 'grab';
+        });
+
+        let touchStartDist = 0;
+        let touchStartScale = 1;
+
+        viewport.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                isPanning = true;
+                const touch = e.touches[0];
+                start = { x: touch.clientX - pointX, y: touch.clientY - pointY };
+            } else if (e.touches.length === 2) {
+                isPanning = false;
+                const touch1 = e.touches[0];
+                const touch2 = e.touches[1];
+                touchStartDist = Math.hypot(touch1.clientX - touch2.clientX, touch1.clientY - touch2.clientY);
+                touchStartScale = scale;
+            }
+        });
+
+        viewport.addEventListener('touchmove', (e) => {
+            if (isPanning && e.touches.length === 1) {
+                const touch = e.touches[0];
+                pointX = touch.clientX - start.x;
+                pointY = touch.clientY - start.y;
+                setTransform();
+            } else if (e.touches.length === 2) {
+                const touch1 = e.touches[0];
+                const touch2 = e.touches[1];
+                const dist = Math.hypot(touch1.clientX - touch2.clientX, touch1.clientY - touch2.clientY);
+                const midX = (touch1.clientX + touch2.clientX) / 2;
+                const midY = (touch1.clientY + touch2.clientY) / 2;
+                const svgX = (midX - pointX) / scale;
+                const svgY = (midY - pointY) / scale;
+                const factor = dist / touchStartDist;
+                scale = Math.max(0.7, Math.min(5.0, touchStartScale * factor));
+                pointX = midX - svgX * scale;
+                pointY = midY - svgY * scale;
+                setTransform();
+            }
+        });
+
+        viewport.addEventListener('touchend', () => { isPanning = false; });
+
+        viewport.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const xs = (e.clientX - pointX) / scale;
+            const ys = (e.clientY - pointY) / scale;
+            const delta = -e.deltaY;
+            const zoomFactor = delta > 0 ? 1.1 : 1 / 1.1;
+            scale = Math.max(0.7, Math.min(5.0, scale * zoomFactor));
+            pointX = e.clientX - xs * scale;
+            pointY = e.clientY - ys * scale;
+            setTransform();
+        });
+
+        window.zoomIn = function() {
+            const viewWidth = viewport.clientWidth;
+            const viewHeight = viewport.clientHeight;
+            const centerX = viewWidth / 2;
+            const centerY = viewHeight / 2;
+            const xs = (centerX - pointX) / scale;
+            const ys = (centerY - pointY) / scale;
+            scale = Math.min(5.0, scale + 0.35);
+            pointX = centerX - xs * scale;
+            pointY = centerY - ys * scale;
+            setTransform();
+        };
+
+        window.zoomOut = function() {
+            const viewWidth = viewport.clientWidth;
+            const viewHeight = viewport.clientHeight;
+            const centerX = viewWidth / 2;
+            const centerY = viewHeight / 2;
+            const xs = (centerX - pointX) / scale;
+            const ys = (centerY - pointY) / scale;
+            scale = Math.max(0.7, scale - 0.35);
+            pointX = centerX - xs * scale;
+            pointY = centerY - ys * scale;
+            setTransform();
+        };
+
+        if (window.cachedPayload) {
+            window.loadModel(window.cachedPayload);
+        }
+    </script>
+</body>
+</html>
+`;
 
 const WebViewComponent = WebView as any;
 
@@ -313,6 +1047,41 @@ type RouteParams = {
     NavigationScreen: {
         cabinetName?: string;
     };
+};
+
+type MapPoint = { x: number; y: number };
+type ModelCoordinate = { x: number; y: number; z: number; meshName: string };
+
+const toMapPoint = (value: any): MapPoint | null => {
+    const x = Number(value?.x);
+    const y = Number(value?.y);
+
+    return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+};
+
+/**
+ * The location API supplies the route as map pixels. Keep the order returned by
+ * `route_to_destination.nodes`: it is already the shortest path from source to
+ * destination. The renderer converts these pixels to the GLB's world space.
+ */
+const buildRoutePoints = (visitorLocation: any, visitorAssignedCabinet: any): MapPoint[] => {
+    const candidates = [
+        visitorLocation?.location,
+        ...(visitorLocation?.wayfinding?.route_to_destination?.nodes ?? []).map((node: any) => node?.position),
+        visitorLocation?.target_coordinates ?? visitorAssignedCabinet?.cabinet,
+    ];
+
+    return candidates.reduce<MapPoint[]>((points, candidate) => {
+        const point = toMapPoint(candidate);
+        const previous = points[points.length - 1];
+
+        // The nearest node can match the current location. Avoid rendering a
+        // zero-length tube for that common case.
+        if (point && (!previous || previous.x !== point.x || previous.y !== point.y)) {
+            points.push(point);
+        }
+        return points;
+    }, []);
 };
 
 const NavigationScreen = () => {
@@ -326,10 +1095,24 @@ const NavigationScreen = () => {
     const { colors } = useTheme();
     const styles = useStyles(colors);
 
-    const [selectedFloor, setSelectedFloor] = useState<string>('F2');
+    const [selectedFloor, setSelectedFloor] = useState<string>('F1');
     const [modelBase64, setModelBase64] = useState<string | null>(null);
     const [loadingModel, setLoadingModel] = useState<boolean>(true);
+    const [pickedModelCoordinate, setPickedModelCoordinate] = useState<ModelCoordinate | null>(null);
     const webViewRef = React.useRef<any>(null);
+
+    // MB3-F00 is the ground-floor map and must use GRFloor.glb. Rendering its
+    // route over the first-floor model puts otherwise-correct coordinates in
+    // the wrong physical layout.
+    useEffect(() => {
+        const mapName = visitorLocation?.map?.name?.toUpperCase();
+
+        if (mapName?.includes('F00') || mapName?.includes('GROUND')) {
+            setSelectedFloor('GR');
+        } else if (mapName?.includes('F01') || mapName?.includes('F02')) {
+            setSelectedFloor('F1');
+        }
+    }, [visitorLocation?.map?.name]);
 
     const handleBack = () => {
         navigation.goBack();
@@ -357,6 +1140,26 @@ const NavigationScreen = () => {
         }
     };
 
+    const handleWebViewMessage = (event: any) => {
+        try {
+            const message = JSON.parse(event.nativeEvent.data);
+            if (message?.type === 'MODEL_COORDINATE') {
+                setPickedModelCoordinate({
+                    x: Number(message.x),
+                    y: Number(message.y),
+                    z: Number(message.z),
+                    meshName: String(message.meshName || 'Unnamed mesh'),
+                });
+            } else if (message?.type === 'LOG') {
+                console.log('[WebView Log]', message.message);
+            } else if (message?.type === 'ERROR') {
+                console.error('[WebView Error]', message.message);
+            }
+        } catch {
+            // Ignore non-JSON WebView messages.
+        }
+    };
+
     const handleSelectFloor = (floor: string) => {
         setSelectedFloor(floor);
         if (webViewRef.current) {
@@ -364,14 +1167,14 @@ const NavigationScreen = () => {
         }
     };
 
-    // Load GLB model file as base64 when selectedFloor changes
+    // Load 2D Map image file as base64 when selectedFloor changes
     useEffect(() => {
-        const loadGLB = async () => {
+        const load2DMap = async () => {
             setLoadingModel(true);
             try {
-                const asset = selectedFloor === 'F1' ? ImageSource.GrFloorGlb : ImageSource.MapGlb;
+                const asset = selectedFloor === 'GR' ? ImageSource.GroundFloor2D : ImageSource.FirstFloor2D;
                 const source = Image.resolveAssetSource(asset);
-                console.log('Fetching local GLB asset URI for floor', selectedFloor, ':', source.uri);
+                console.log('Fetching local 2D Map asset URI for floor', selectedFloor, ':', source.uri);
                 const response = await fetch(source.uri);
                 const blob = await response.blob();
                 
@@ -387,79 +1190,61 @@ const NavigationScreen = () => {
                 };
                 reader.readAsDataURL(blob);
             } catch (error) {
-                console.log('Error loading GLB asset:', error);
+                console.log('Error loading 2D Map asset:', error);
                 setLoadingModel(false);
             }
         };
 
-        loadGLB();
+        load2DMap();
     }, [selectedFloor]);
 
     const handleWebViewLoadEnd = () => {
         if (modelBase64 && webViewRef.current) {
-            console.log('WebView loaded, injecting 3D model base64...');
-            webViewRef.current.injectJavaScript(`window.loadModel("${modelBase64}", "${cabinetName}"); void(0);`);
+            console.log('WebView loaded, injecting initial 2D map and route payload...');
+            
+            const points = buildRoutePoints(visitorLocation, visitorAssignedCabinet);
+            const mapMeta = visitorLocation?.map;
+            const nodes = visitorLocation?.wayfinding?.nodes;
+            const routeNodeNames = (visitorLocation?.wayfinding?.route_to_destination?.nodes ?? [])
+                .map((node: any) => node?.name)
+                .filter(Boolean);
+
+            const payload = JSON.stringify({
+                modelBase64,
+                cabinetName,
+                floor: selectedFloor,
+                visitorLocation
+            });
+
+            webViewRef.current.injectJavaScript(`
+                window.loadModel(${payload});
+                void(0);
+            `);
         }
     };
 
+    // Watch for model or location changes and push updates atomically
     useEffect(() => {
         if (modelBase64 && webViewRef.current) {
-            console.log('Model base64 updated, injecting to WebView...');
-            webViewRef.current.injectJavaScript(`window.loadModel("${modelBase64}", "${cabinetName}"); void(0);`);
-        }
-    }, [modelBase64, cabinetName]);
+            console.log('State updated, pushing 2D map and route payload update...');
+            
+            const payload = JSON.stringify({
+                modelBase64,
+                cabinetName,
+                floor: selectedFloor,
+                visitorLocation
+            });
 
-    // Draw polyline when coordinates are available
-    useEffect(() => {
-        if (visitorLocation && webViewRef.current) {
-            const points: { x: number; y: number }[] = [];
-            
-            // 1. Add start location
-            if (visitorLocation.location) {
-                points.push({
-                    x: visitorLocation.location.x,
-                    y: visitorLocation.location.y
-                });
-            }
-            
-            // 2. Add wayfinding path nodes in sequence
-            if (visitorLocation.wayfinding?.route_to_destination?.nodes) {
-                visitorLocation.wayfinding.route_to_destination.nodes.forEach((node: any) => {
-                    if (node.position) {
-                        points.push({
-                            x: node.position.x,
-                            y: node.position.y
-                        });
-                    }
-                });
-            }
-            
-            // 3. Add target coordinates / end location
-            if (visitorLocation.target_coordinates) {
-                points.push({
-                    x: visitorLocation.target_coordinates.x,
-                    y: visitorLocation.target_coordinates.y
-                });
-            } else if (visitorAssignedCabinet?.cabinet) {
-                points.push({
-                    x: visitorAssignedCabinet.cabinet.x,
-                    y: visitorAssignedCabinet.cabinet.y
-                });
-            }
-            
-            if (points.length >= 2 && visitorLocation.map) {
-                console.log('Injecting drawPolyline with points:', JSON.stringify(points));
-                webViewRef.current.injectJavaScript(`
-                    if(window.drawPolyline) {
-                        window.drawPolyline(${JSON.stringify(points)}, ${JSON.stringify(visitorLocation.map)});
-                    } else {
-                        window.cachedPolyline = { points: ${JSON.stringify(points)}, mapMeta: ${JSON.stringify(visitorLocation.map)} };
-                    }
-                    void(0);
-                `);
-            }
+            webViewRef.current.injectJavaScript(`
+                if (window.loadModel) {
+                    window.loadModel(${payload});
+                } else {
+                    window.cachedPayload = ${payload};
+                }
+                void(0);
+            `);
         }
-    }, [visitorLocation, visitorAssignedCabinet]);
+    }, [modelBase64, visitorLocation, visitorAssignedCabinet, cabinetName, selectedFloor]);
 
     return (
         <SafeAreaView edges={['bottom', 'top']} style={styles.container}>
@@ -484,9 +1269,10 @@ const NavigationScreen = () => {
                 <WebViewComponent
                     ref={webViewRef}
                     originWhitelist={['*']}
-                    source={{ html: HTML_3D_RENDERER }}
+                    source={{ html: HTML_2D_RENDERER }}
                     style={{ flex: 1 }}
                     onLoadEnd={handleWebViewLoadEnd}
+                    onMessage={handleWebViewMessage}
                     javaScriptEnabled={true}
                     domStorageEnabled={true}
                 />
@@ -503,7 +1289,19 @@ const NavigationScreen = () => {
                         backgroundColor: 'rgba(255,255,255,0.8)'
                     }}>
                         <ActivityIndicator size="large" color="#E2231A" />
-                        <Text style={{ marginTop: 10, color: '#87848A' }}>Preparing 3D Assets...</Text>
+                        <Text style={{ marginTop: 10, color: '#87848A' }}>Preparing 2D Map...</Text>
+                    </View>
+                )}
+
+                {pickedModelCoordinate && (
+                    <View style={styles.coordinateInspector} pointerEvents="none">
+                        <Text style={styles.coordinateInspectorTitle}>3D coordinate</Text>
+                        <Text style={styles.coordinateInspectorValue}>
+                            X {pickedModelCoordinate.x.toFixed(2)} · Y {pickedModelCoordinate.y.toFixed(2)} · Z {pickedModelCoordinate.z.toFixed(2)}
+                        </Text>
+                        <Text style={styles.coordinateInspectorHint}>
+                            {pickedModelCoordinate.meshName} — match this landmark to an API node.
+                        </Text>
                     </View>
                 )}
 
@@ -519,7 +1317,7 @@ const NavigationScreen = () => {
 
                 {/* HUD Floor level selector overlay */}
                 <View style={styles.floorSelectorContainer}>
-                    {['F2', 'F1'].map((floor) => (
+                    {['F1', 'GR'].map((floor) => (
                         <TouchableOpacity
                             key={floor}
                             style={[

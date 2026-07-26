@@ -21,7 +21,7 @@ const SplashScreen = () => {
     useEffect(() => {
         let timer: any;
         const checkSession = async () => {
-            const STATIC_LOGIN = true; // Set to false to enable production QR scanner flow
+            const STATIC_LOGIN = false; // Set to false to enable production QR scanner flow
 
             if (STATIC_LOGIN) {
                 console.log('Static login is active. Logging in with mock details...');

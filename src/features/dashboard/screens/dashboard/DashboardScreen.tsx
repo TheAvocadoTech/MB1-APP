@@ -69,7 +69,7 @@ const DashboardScreen = () => {
             dispatch(getCabinetDetails(cabinetId));
             
             console.log('Dispatching APIs for visitor:', visId);
-            dispatch(getVisitorAssignedCabinet({ visitorId: visId, idNumber }));
+            await dispatch(getVisitorAssignedCabinet({ visitorId: visId, idNumber })).unwrap();
             dispatch(getVisitorLocation(visId));
             
             console.log('Successfully dispatched all cabinet data requests');
@@ -104,14 +104,7 @@ const DashboardScreen = () => {
         fetchDashboardData();
     }, [token, dispatch]);
 
-    // Fetch visitor location whenever visitor details are loaded or updated
-    useEffect(() => {
-        const visId = visitor?.id;
-        if (visId) {
-            console.log('Visitor ID available, fetching location path data for:', visId);
-            dispatch(getVisitorLocation(visId));
-        }
-    }, [visitor, dispatch]);
+
 
     // Fetch cabinet list when cabinets tab is selected or visitor idNumber changes
     useEffect(() => {

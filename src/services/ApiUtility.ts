@@ -206,7 +206,7 @@ export const fetchVisitorAssignedCabinet = async (visitorId: string, idNumber: s
       console.log("This is url >>", `https://api.avocadotech.in/api/IDVisitor/visitors/${visitorId}/cabinet`)
     try {
         const response = await publicApi.put(`/api/IDVisitor/visitors/${visitorId}/cabinet`, {
-            data: { "idNumber" : "Tag1" } // Note: sending data in GET request
+            idNumber: idNumber
         });
       
         console.log("This is fetch visitor assigned cabinet response ===>", response);
@@ -245,6 +245,28 @@ export const updateVisitorCabinet = async (visitorId: string, idNumber: string) 
             return error.response.data;
         }
         throw error;
+    }
+};
+
+export const getMapDetails = async (mapId: string) => {
+    try {
+        const response = await api.get(`/api/maps/${mapId}`);
+        return response.data;
+    } catch (error: any) {
+        console.warn("Map details API notice:", error.message);
+        return null;
+    }
+};
+
+export const getNavigationRoute = async (mapId: string, fromX: number, fromY: number, toX: number, toY: number) => {
+    try {
+        const response = await api.get(
+            `/api/maps/${mapId}/route?fromX=${fromX}&fromY=${fromY}&toX=${toX}&toY=${toY}`
+        );
+        return response.data;
+    } catch (error: any) {
+        console.warn("Navigation route API notice:", error.message);
+        return null;
     }
 };
 
