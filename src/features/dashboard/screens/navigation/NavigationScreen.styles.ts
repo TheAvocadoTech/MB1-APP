@@ -36,7 +36,7 @@ export const useStyles = (colors: ColorsType) =>
         logoTitle: {
             fontSize: 22,
             lineHeight: 24,
-            color: '#707A3E',
+            color: 'red',
             fontWeight: 'bold',
             letterSpacing: 1.5,
         },

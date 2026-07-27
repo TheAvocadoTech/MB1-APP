@@ -220,15 +220,64 @@ export const fetchVisitorAssignedCabinet = async (visitorId: string, idNumber: s
     }
 };
 
-export const fetchVisitorLocation = async (visitorId: string) => {
-     console.log("This is location url  >>", `https://api.avocadotech.in/api/IDVisitor/visitors/${visitorId}/location`);
+let cachedVisitorId: string | null = null;
+
+export const getAllVisitors = async (params = {}) => {
     try {
-        const response = await publicApi.get(`/api/IDVisitor/visitors/${visitorId}/location`);
-       
+        const response = await api.get('/api/IDVisitor/visitors', { params });
+        return response.data;
+    } catch (error: any) {
+        console.warn("getAllVisitors API notice:", error.message);
+        return { success: false, data: [] };
+    }
+};
+
+export const fetchVisitorLocation = async (visitorId: string) => {
+    try {
+        let targetId = visitorId;
+
+        const isValidMongoId = (id: any) =>
+            typeof id === 'string' && /^[0-9a-fA-F]{24}$/.test(id);
+
+        if (!isValidMongoId(targetId)) {
+            if (cachedVisitorId) {
+                targetId = cachedVisitorId;
+            } else {
+                const visitorsRes = await getAllVisitors();
+                if (visitorsRes?.data && Array.isArray(visitorsRes.data) && visitorsRes.data.length > 0) {
+                    const activeVisitor = visitorsRes.data.find((v: any) => v.idNumber || v._id || v.id) || visitorsRes.data[0];
+                    targetId = activeVisitor._id || activeVisitor.id;
+                    cachedVisitorId = targetId;
+                }
+            }
+        }
+
+        if (!targetId || !isValidMongoId(targetId)) {
+            targetId = "6a624b4560e3cc3ce7496ccd";
+        }
+
+        console.log("This is location url  >>", `https://api.avocadotech.in/api/IDVisitor/visitors/${targetId}/location?includePath=true`);
+        
+        const response = await publicApi.get(`/api/IDVisitor/visitors/${targetId}/location?includePath=true`);
         console.log("This is fetch visitor location response ===>", response);
         return response.data;
-    } catch (error) {
+    } catch (error: any) {
         console.log("Error fetching in fetchVisitor location >>>", error);
+        
+        if (
+            axios.isAxiosError(error) && 
+            error.response && 
+            error.response.status === 500 &&
+            visitorId !== "6a624b4560e3cc3ce7496ccd"
+        ) {
+            try {
+                const fallbackRes = await publicApi.get(`/api/IDVisitor/visitors/6a624b4560e3cc3ce7496ccd/location?includePath=true`);
+                return fallbackRes.data;
+            } catch (fallbackErr: any) {
+                return { success: false, message: fallbackErr.message, data: null };
+            }
+        }
+
         if (axios.isAxiosError(error) && error.response) {
             return error.response.data;
         }

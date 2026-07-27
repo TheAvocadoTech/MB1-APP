@@ -4,11 +4,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { WebView } from 'react-native-webview';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../../../store/store';
+import { getVisitorLocation } from '../../../../store/slices/cabinetSlice';
+import { getNavigationRoute, getMapDetails } from '../../../../services/ApiUtility';
 
 import { default as Text } from '../../../../components/Text/MSText';
 import { ImageSource } from '../../../../constants/assets/images';
+import { MAP_BASE64_DATA } from '../../../../constants/assets/images/mapBase64Data';
 import { useTheme } from '../../../../theme/ThemeProvider';
 import { useStyles } from './NavigationScreen.styles';
 
@@ -578,6 +581,10 @@ const HTML_2D_RENDERER = `
         #viewport { width: 100%; height: 100%; position: relative; cursor: grab; }
         svg { position: absolute; top: 0; left: 0; transform-origin: 0 0; will-change: transform; }
         #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-family: sans-serif; font-size: 16px; color: #87848A; }
+        @keyframes path-dash { to { stroke-dashoffset: -40; } }
+        .path-animated { stroke-dasharray: 8 6; animation: path-dash 1.5s linear infinite; }
+        @keyframes ble-beacon-pulse { 0% { r: 12px; opacity: 0.8; } 100% { r: 34px; opacity: 0; } }
+        .ble-pulse-aura { animation: ble-beacon-pulse 2s cubic-bezier(0, 0.2, 0.8, 1) infinite; }
     </style>
 </head>
 <body>
@@ -716,6 +723,11 @@ const HTML_2D_RENDERER = `
             renderMapElements(payload);
         };
 
+        window.updateLocation = function(payload) {
+            if (!payload) return;
+            renderMapElements(payload);
+        };
+
         function renderMapElements(payload) {
             const floor = payload.floor || 'GR';
             const visitorLocation = payload.visitorLocation;
@@ -785,7 +797,10 @@ const HTML_2D_RENDERER = `
                 const bleLoc = visitorLocation?.location || { x: 5004.59, y: 2313.4 };
                 const blePos = getSvgCoords(bleLoc.x, bleLoc.y);
                 const startPos = floor === "F1" ? getSvgCoords(F1_LIFT_COORDINATES.x, F1_LIFT_COORDINATES.y) : getSvgCoords(bleLoc.x, bleLoc.y);
-                const destPos = floor === "GR" ? getSvgCoords(LIFT_COORDINATES.x, LIFT_COORDINATES.y) : getSvgCoords(CABINET_COORDINATES.x, CABINET_COORDINATES.y);
+                const targetCoords = visitorLocation?.target_coordinates;
+                const destPos = (targetCoords && targetCoords.x !== undefined && targetCoords.y !== undefined)
+                    ? getSvgCoords(targetCoords.x, targetCoords.y)
+                    : (floor === "GR" ? getSvgCoords(LIFT_COORDINATES.x, LIFT_COORDINATES.y) : getSvgCoords(CABINET_COORDINATES.x, CABINET_COORDINATES.y));
 
                 if (floor === "F1") {
                     const tempPt = getSvgCoords(TEMP_DOT_COORDINATES.x, TEMP_DOT_COORDINATES.y);
@@ -841,6 +856,15 @@ const HTML_2D_RENDERER = `
                         pathFg.setAttribute('marker-end', 'url(#routeArrow)');
                     }
                     polylineGroup.appendChild(pathFg);
+
+                    if (floor === "GR") {
+                        const pathCore = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        pathCore.setAttribute('d', pathD); pathCore.setAttribute('fill', 'none');
+                        pathCore.setAttribute('stroke', '#ffffff'); pathCore.setAttribute('stroke-width', '1.2');
+                        pathCore.setAttribute('stroke-linecap', 'round');
+                        pathCore.setAttribute('class', 'path-animated');
+                        polylineGroup.appendChild(pathCore);
+                    }
                 }
 
                 if (floor === "GR") {
@@ -885,14 +909,25 @@ const HTML_2D_RENDERER = `
                         pathFg.setAttribute('stroke-width', '3'); pathFg.setAttribute('stroke-linecap', 'round'); pathFg.setAttribute('stroke-linejoin', 'round');
                         pathFg.setAttribute('marker-end', 'url(#routeArrow)');
                         polylineGroup.appendChild(pathFg);
+
+                        const pathCore = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        pathCore.setAttribute('d', pathD); pathCore.setAttribute('fill', 'none');
+                        pathCore.setAttribute('stroke', '#ffffff'); pathCore.setAttribute('stroke-width', '1.2');
+                        pathCore.setAttribute('stroke-linecap', 'round');
+                        pathCore.setAttribute('class', 'path-animated');
+                        polylineGroup.appendChild(pathCore);
                     }
                 }
 
                 if (blePos) {
                     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
                     const aura = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                    aura.setAttribute('cx', blePos.svgX); aura.setAttribute('cy', blePos.svgY); aura.setAttribute('r', '8');
-                    aura.setAttribute('fill', '#0085ff'); aura.setAttribute('opacity', '0.3'); g.appendChild(aura);
+                    aura.setAttribute('cx', blePos.svgX); aura.setAttribute('cy', blePos.svgY);
+                    aura.setAttribute('r', '6');
+                    aura.setAttribute('fill', '#0085ff');
+                    aura.setAttribute('opacity', '0.8');
+                    aura.setAttribute('class', 'ble-pulse-aura');
+                    g.appendChild(aura);
                     const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                     dot.setAttribute('cx', blePos.svgX); dot.setAttribute('cy', blePos.svgY); dot.setAttribute('r', '4');
                     dot.setAttribute('fill', '#0085ff'); dot.setAttribute('stroke', '#ffffff'); dot.setAttribute('stroke-width', '0.5'); g.appendChild(dot);
@@ -1084,10 +1119,19 @@ const buildRoutePoints = (visitorLocation: any, visitorAssignedCabinet: any): Ma
     }, []);
 };
 
+const LIFT_COORDINATES = { x: 5220.46912942509, y: 1681.3904907165097 };
+const F1_LIFT_COORDINATES = { x: 5720.46912942509, y: 1681.3904907165097 };
+const CABINET_COORDINATES = { x: 5620.3, y: 2200.84 };
+const FLOOR_MAP_IDS = {
+    GR: "30141417-44ea-4982-993c-6225c9f08315",
+    F1: "cfa55e13-794f-4081-b1b7-e35f1ea67325"
+};
+
 const NavigationScreen = () => {
     const navigation = useNavigation<NativeStackNavigationProp<any>>();
     const route = useRoute<RouteProp<RouteParams, 'NavigationScreen'>>();
     const cabinetName = route.params?.cabinetName || 'GR CL1 R1 0021';
+    const dispatch = useDispatch<any>();
 
     // Fetch cabinet data from Redux
     const { cabinetDetails, visitorAssignedCabinet, visitorLocation } = useSelector((state: RootState) => state.cabinet);
@@ -1100,6 +1144,7 @@ const NavigationScreen = () => {
     const [loadingModel, setLoadingModel] = useState<boolean>(true);
     const [pickedModelCoordinate, setPickedModelCoordinate] = useState<ModelCoordinate | null>(null);
     const webViewRef = React.useRef<any>(null);
+    const [mergedVisitorLocation, setMergedVisitorLocation] = useState<any>(null);
 
     // MB3-F00 is the ground-floor map and must use GRFloor.glb. Rendering its
     // route over the first-floor model puts otherwise-correct coordinates in
@@ -1114,18 +1159,84 @@ const NavigationScreen = () => {
         }
     }, [visitorLocation?.map?.name]);
 
+    // Fetch live location and update every 3 seconds using setInterval
+    useEffect(() => {
+        const visitorId = visitorLocation?.visitor?.id || visitorLocation?.id;
+        if (!visitorId) return;
+
+        const pollLocation = () => {
+            console.log('setInterval: Polling visitor location for visitorId:', visitorId);
+            dispatch(getVisitorLocation(visitorId));
+        };
+
+        pollLocation();
+
+        const interval = setInterval(pollLocation, 3000);
+        return () => clearInterval(interval);
+    }, [dispatch, visitorLocation?.visitor?.id || visitorLocation?.id]);
+
+    // Watch visitorLocation and selectedFloor, calculate path route dynamically, and merge
+    useEffect(() => {
+        if (!visitorLocation) {
+            setMergedVisitorLocation(null);
+            return;
+        }
+
+        let isMounted = true;
+
+        const fetchRoute = async () => {
+            const floor = selectedFloor;
+            const bleX = visitorLocation?.location?.x;
+            const bleY = visitorLocation?.location?.y;
+            const targetCoords = visitorLocation?.target_coordinates;
+
+            if (bleX === undefined || bleY === undefined) {
+                if (isMounted) setMergedVisitorLocation(visitorLocation);
+                return;
+            }
+
+            const mapId = floor === 'GR' ? FLOOR_MAP_IDS.GR : FLOOR_MAP_IDS.F1;
+            const fromX = bleX;
+            const fromY = bleY;
+            
+            const toX = (targetCoords && targetCoords.x !== undefined && targetCoords.y !== undefined)
+                ? targetCoords.x
+                : (floor === 'GR' ? LIFT_COORDINATES.x : CABINET_COORDINATES.x);
+            
+            const toY = (targetCoords && targetCoords.x !== undefined && targetCoords.y !== undefined)
+                ? targetCoords.y
+                : (floor === 'GR' ? LIFT_COORDINATES.y : CABINET_COORDINATES.y);
+
+            console.log(`Calculating navigation route via API: mapId=${mapId}, from=(${fromX},${fromY}), to=(${toX},${toY})`);
+            const routeRes = await getNavigationRoute(mapId, fromX, fromY, toX, toY);
+            
+            const routePayload = routeRes?.data?.route || routeRes?.route || routeRes?.data || routeRes;
+            
+            if (isMounted) {
+                const merged = {
+                    ...visitorLocation,
+                    wayfinding: {
+                        ...(visitorLocation?.wayfinding || {}),
+                        route_to_destination: routePayload
+                    }
+                };
+                setMergedVisitorLocation(merged);
+            }
+        };
+
+        fetchRoute();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [visitorLocation, selectedFloor]);
+
     const handleBack = () => {
         navigation.goBack();
     };
 
-    const handleGetIntoPhone = async () => {
-        const url = 'https://temp-browser.vercel.app/';
-        try {
-            await Linking.openURL(url);
-        } catch (error) {
-            Alert.alert('Error', 'Unable to open browser.');
-            console.log('Error opening URL:', error);
-        }
+    const handleGetIntoPhone = () => {
+        navigation.navigate('cameraScanner', { fromNavigation: true });
     };
 
     const handleZoomIn = () => {
@@ -1169,51 +1280,22 @@ const NavigationScreen = () => {
 
     // Load 2D Map image file as base64 when selectedFloor changes
     useEffect(() => {
-        const load2DMap = async () => {
-            setLoadingModel(true);
-            try {
-                const asset = selectedFloor === 'GR' ? ImageSource.GroundFloor2D : ImageSource.FirstFloor2D;
-                const source = Image.resolveAssetSource(asset);
-                console.log('Fetching local 2D Map asset URI for floor', selectedFloor, ':', source.uri);
-                const response = await fetch(source.uri);
-                const blob = await response.blob();
-                
-                const reader = new FileReader();
-                reader.onloadend = () => {
-                    const base64data = reader.result as string;
-                    setModelBase64(base64data);
-                    setLoadingModel(false);
-                };
-                reader.onerror = (err) => {
-                    console.log('FileReader error:', err);
-                    setLoadingModel(false);
-                };
-                reader.readAsDataURL(blob);
-            } catch (error) {
-                console.log('Error loading 2D Map asset:', error);
-                setLoadingModel(false);
-            }
-        };
-
-        load2DMap();
+        setLoadingModel(true);
+        const base64data = selectedFloor === 'GR' ? MAP_BASE64_DATA.GR : MAP_BASE64_DATA.F1;
+        setModelBase64(base64data);
+        setLoadingModel(false);
     }, [selectedFloor]);
 
     const handleWebViewLoadEnd = () => {
         if (modelBase64 && webViewRef.current) {
             console.log('WebView loaded, injecting initial 2D map and route payload...');
             
-            const points = buildRoutePoints(visitorLocation, visitorAssignedCabinet);
-            const mapMeta = visitorLocation?.map;
-            const nodes = visitorLocation?.wayfinding?.nodes;
-            const routeNodeNames = (visitorLocation?.wayfinding?.route_to_destination?.nodes ?? [])
-                .map((node: any) => node?.name)
-                .filter(Boolean);
-
+            const activeLoc = mergedVisitorLocation || visitorLocation;
             const payload = JSON.stringify({
                 modelBase64,
                 cabinetName,
                 floor: selectedFloor,
-                visitorLocation
+                visitorLocation: activeLoc
             });
 
             webViewRef.current.injectJavaScript(`
@@ -1223,18 +1305,17 @@ const NavigationScreen = () => {
         }
     };
 
-    // Watch for model or location changes and push updates atomically
+    // Load or reload the floor plan background image when modelBase64 or floor changes
     useEffect(() => {
         if (modelBase64 && webViewRef.current) {
-            console.log('State updated, pushing 2D map and route payload update...');
-            
+            console.log('Floor or model image changed, injecting loadModel payload...');
+            const activeLoc = mergedVisitorLocation || visitorLocation;
             const payload = JSON.stringify({
                 modelBase64,
                 cabinetName,
                 floor: selectedFloor,
-                visitorLocation
+                visitorLocation: activeLoc
             });
-
             webViewRef.current.injectJavaScript(`
                 if (window.loadModel) {
                     window.loadModel(${payload});
@@ -1244,7 +1325,27 @@ const NavigationScreen = () => {
                 void(0);
             `);
         }
-    }, [modelBase64, visitorLocation, visitorAssignedCabinet, cabinetName, selectedFloor]);
+    }, [modelBase64, selectedFloor]);
+
+    // Push real-time coordinates, route, and marker updates to the WebView
+    useEffect(() => {
+        const activeLoc = mergedVisitorLocation || visitorLocation;
+        if (webViewRef.current && activeLoc) {
+            const payload = JSON.stringify({
+                cabinetName,
+                floor: selectedFloor,
+                visitorLocation: activeLoc
+            });
+            webViewRef.current.injectJavaScript(`
+                if (window.updateLocation) {
+                    window.updateLocation(${payload});
+                } else if (window.loadModel) {
+                    window.loadModel(Object.assign({ floor: "${selectedFloor}", visitorLocation: ${JSON.stringify(activeLoc)}, cabinetName: "${cabinetName}" }, window.cachedPayload || {}));
+                }
+                void(0);
+            `);
+        }
+    }, [mergedVisitorLocation, visitorLocation, visitorAssignedCabinet, cabinetName]);
 
     return (
         <SafeAreaView edges={['bottom', 'top']} style={styles.container}>

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Animated, TouchableOpacity, Image, ActivityIndicator, Alert, StyleSheet } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { View, Animated, TouchableOpacity, Image, ActivityIndicator, Alert, StyleSheet, Linking } from 'react-native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Camera, useCameraDevice, useCameraPermission, useCodeScanner, CameraPermissionStatus } from 'react-native-vision-camera';
 import { useDispatch } from 'react-redux';
@@ -10,13 +10,14 @@ import { default as Text } from '../../../../components/Text/MSText';
 import { ImageSource } from '../../../../constants/assets/images';
 import { useTheme } from '../../../../theme/ThemeProvider';
 import { useStyles } from './CameraScannerScreen.styles';
-import { setCredentials } from '../../../../store/slices/authSlice';
+import { setCredentials, clearCredentials } from '../../../../store/slices/authSlice';
 import { scanQRToken } from '../../../../services/ApiUtility';
 
 const CameraScannerScreen = () => {
     const { colors } = useTheme();
     const styles = useStyles(colors);
     const navigation = useNavigation<NativeStackNavigationProp<any>>();
+    const route = useRoute<any>();
     const dispatch = useDispatch();
 
     const [cameraPos, setCameraPos] = useState<'back' | 'front'>('back');
@@ -80,6 +81,37 @@ const CameraScannerScreen = () => {
             if (codeValue) {
                 setScanned(true);
                 setIsActive(false);
+
+                // If navigated from navigation screen, open hardcoded URL in browser
+                if (route.params?.fromNavigation) {
+                    const targetUrl = 'https://equinix-temp.avocadotech.in/';
+                    console.log('Navigating to hardcoded URL on browser:', targetUrl);
+                    
+                    // Clear credentials and storage first (logout)
+                    Promise.all([
+                        AsyncStorage.removeItem('user_token'),
+                        AsyncStorage.removeItem('user_visitor'),
+                    ])
+                    .then(() => {
+                        dispatch(clearCredentials());
+                        // Replace or reset the stack to scanQr so when the user returns to the app,
+                        // they are completely logged out and see the scanQr screen.
+                        navigation.reset({
+                            index: 0,
+                            routes: [{ name: 'scanQr' }],
+                        });
+                        
+                        // Open browser URL
+                        return Linking.openURL(targetUrl);
+                    })
+                    .catch((err) => {
+                        console.log('Error during logout or opening browser:', err);
+                        setScanned(false);
+                        setIsActive(true);
+                    });
+                    return;
+                }
+
                 setLoading(true);
                 console.log('QR Code Scanned, verifying: ', codeValue);
 
