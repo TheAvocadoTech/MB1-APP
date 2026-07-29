@@ -226,7 +226,7 @@ const DashboardScreen = () => {
 
     // Active session checker timer
     useEffect(() => {
-        if (!visitor || !visitor.qrExpiresAt) return;
+        if (!visitor || !visitor.qrExpiresAt || APP_FLAVOR === 'MB1') return;
         const qrExpiresAt = visitor.qrExpiresAt;
 
         const interval = setInterval(() => {

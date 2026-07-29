@@ -828,12 +828,12 @@ const HTML_2D_RENDERER = `
             if (polylineGroup) {
                 polylineGroup.innerHTML = '';
                 const appFlavor = payload.appFlavor || 'MB3';
-                const defaultBleLoc = appFlavor === 'MB1' ? { x: 800, y: 2100 } : { x: 5004.59, y: 2313.4 };
+                const defaultBleLoc = appFlavor === 'MB1' ? { x: 623.59, y: 2055.50 } : { x: 5004.59, y: 2313.4 };
                 const bleLoc = visitorLocation?.location || defaultBleLoc;
                 const blePos = getSvgCoords(bleLoc.x, bleLoc.y);
                 const startPos = floor === "F1" ? getSvgCoords(F1_LIFT_COORDINATES.x, F1_LIFT_COORDINATES.y) : getSvgCoords(bleLoc.x, bleLoc.y);
                 const targetCoords = visitorLocation?.target_coordinates;
-                const defaultTargetCoords = appFlavor === 'MB1' ? { x: 5000, y: 2100 } : (floor === "GR" ? LIFT_COORDINATES : CABINET_COORDINATES);
+                const defaultTargetCoords = appFlavor === 'MB1' ? { x: 6141.01, y: 2441.60 } : (floor === "GR" ? LIFT_COORDINATES : CABINET_COORDINATES);
                 const destPos = (targetCoords && targetCoords.x !== undefined && targetCoords.y !== undefined)
                     ? getSvgCoords(targetCoords.x, targetCoords.y)
                     : getSvgCoords(defaultTargetCoords.x, defaultTargetCoords.y);
@@ -1204,8 +1204,8 @@ const STATIC_MB1_VISITOR_LOCATION = {
         qrExpiresAt: "2026-07-28T08:33:58.062Z"
     },
     location: {
-        x: 800,
-        y: 2100,
+        x: 623.59,
+        y: 2055.50,
         name: "Tag1",
         mac: "ea2671f0003d",
         map_id: "mb1-map",
@@ -1217,8 +1217,8 @@ const STATIC_MB1_VISITOR_LOCATION = {
         is_stable: true
     },
     target_coordinates: {
-        x: 5000,
-        y: 2100
+        x: 6141.01,
+        y: 2441.60
     }
 };
 
@@ -1290,20 +1290,20 @@ const NavigationScreen = () => {
             if (APP_FLAVOR === 'MB1') {
                 const staticMb1Route = {
                     waypoints: [
-                        { x: 800, y: 2100 },
-                        { x: 1000, y: 1750 },
-                        { x: 1200, y: 1750 },
-                        { x: 1350, y: 2100 },
-                        { x: 1550, y: 2100 },
-                        { x: 2200, y: 2100 },
-                        { x: 2600, y: 2100 },
-                        { x: 3000, y: 2100 },
-                        { x: 3000, y: 1750 },
-                        { x: 3800, y: 1750 },
-                        { x: 4200, y: 1750 },
-                        { x: 4200, y: 2100 },
-                        { x: 4600, y: 2100 },
-                        { x: 5000, y: 2100 }
+                        { x: 623.59, y: 2055.50 },
+                        { x: 848.39, y: 1976.96 },
+                        { x: 1435.56, y: 2281.80 },
+                        { x: 1850.32, y: 2282.07 },
+                        { x: 2226.33, y: 2322.02 },
+                        { x: 2967.84, y: 2304.06 },
+                        { x: 2895.46, y: 2003.78 },
+                        { x: 3368.87, y: 2003.78 },
+                        { x: 3776.17, y: 2004.05 },
+                        { x: 4204.96, y: 2023.12 },
+                        { x: 4137.54, y: 2388.88 },
+                        { x: 4610.24, y: 2268.12 },
+                        { x: 4929.21, y: 2245.31 },
+                        { x: 6141.01, y: 2441.60 }
                     ]
                 };
                 
@@ -1559,7 +1559,7 @@ const NavigationScreen = () => {
 
                 {/* HUD Floor level selector overlay */}
                 <View style={styles.floorSelectorContainer}>
-                    {['F1', 'GR'].map((floor) => (
+                    {(APP_FLAVOR === 'MB1' ? ['GR'] : ['F1', 'GR']).map((floor) => (
                         <TouchableOpacity
                             key={floor}
                             style={[
