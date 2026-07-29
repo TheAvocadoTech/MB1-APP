@@ -16,6 +16,7 @@ import { clearCredentials, setCredentials } from '../../../../store/slices/authS
 import { RootState, AppDispatch } from '../../../../store/store';
 import { regenerateQR, fetchVisitorDashboard, fetchCabinetsList, updateVisitorCabinet } from '../../../../services/ApiUtility';
 import { getCabinetDetails, getVisitorAssignedCabinet, getVisitorLocation } from '../../../../store/slices/cabinetSlice';
+import { APP_FLAVOR } from '../../../../config/flavor';
 
 const DashboardScreen = () => {
     const navigation = useNavigation<NativeStackNavigationProp<any>>();
@@ -44,6 +45,10 @@ const DashboardScreen = () => {
     const handleSelectCabinet = async (cabinetName: string, cabinetId: string) => {
         setSelectedCabinet(cabinetName);
         if (!cabinetId) return;
+
+        if (APP_FLAVOR === 'MB1') {
+            return;
+        }
         
         try {
             console.log('Fetching details for cabinet ID:', cabinetId);
@@ -88,7 +93,7 @@ const DashboardScreen = () => {
     // Fetch fresh dashboard data on mount
     useEffect(() => {
         const fetchDashboardData = async () => {
-            if (!token) return;
+            if (!token || APP_FLAVOR === 'MB1') return;
             try {
                 console.log('Fetching latest dashboard data...');
                 const res = await fetchVisitorDashboard(token);
@@ -112,6 +117,11 @@ const DashboardScreen = () => {
             const getCabinets = async () => {
                 setLoadingCabinets(true);
                 try {
+                    if (APP_FLAVOR === 'MB1') {
+                        setCabinets([{ _id: 'mb1_static', cabinetName: 'MB1:GF:010010:0515' }]);
+                        setLoadingCabinets(false);
+                        return;
+                    }
                     const idNumber = visitor?.idNumber || 'Tag1';
                     console.log('Fetching cabinets list for ID:', idNumber);
                     const res = await fetchCabinetsList(idNumber);
@@ -188,15 +198,17 @@ const DashboardScreen = () => {
     const handleExtendSession = async () => {
         if (!visitor || !visitor.id) return;
         
-        // Call regenerate-qr API
-        const data = await handleRegenerateQR();
-        
         let newExpiresAt: string;
-        if (data && data.qrExpiresAt) {
-            newExpiresAt = data.qrExpiresAt;
-        } else {
-            // Fallback: Add 3600 seconds (1 hour) to the current time
+        if (APP_FLAVOR === 'MB1') {
             newExpiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
+        } else {
+            // Call regenerate-qr API
+            const data = await handleRegenerateQR();
+            if (data && data.qrExpiresAt) {
+                newExpiresAt = data.qrExpiresAt;
+            } else {
+                newExpiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
+            }
         }
 
         // Save updated session to AsyncStorage and Redux
@@ -229,7 +241,9 @@ const DashboardScreen = () => {
                 if (!showTimeoutWarning) {
                     setShowTimeoutWarning(true);
                     setWarningCountdown(30);
-                    handleRegenerateQR();
+                    if (APP_FLAVOR !== 'MB1') {
+                        handleRegenerateQR();
+                    }
                 }
             }
 

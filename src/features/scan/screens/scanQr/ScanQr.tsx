@@ -6,6 +6,7 @@ import { ImageSource } from '../../../../constants/assets/images'
 import { useTheme } from '../../../../theme/ThemeProvider'
 import { useStyles } from './ScanQr.styles'
 import PrimaryButton from '../../../../components/Button/PrimaryButton/PrimaryButton'
+import { APP_FLAVOR } from '../../../../config/flavor';
 import { useNavigation } from '@react-navigation/native'
 import { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
@@ -34,7 +35,7 @@ const ScanQr = () => {
                 </View>
 
                 <View style={styles.textContainer}>
-                    <Text varient='medium' style={styles.inactiveText}>Welcome to <Text style={styles.activeText}>EQUINIX</Text> Navigation Service </Text>
+                    <Text varient='medium' style={styles.inactiveText}>Welcome to <Text style={styles.activeText}>{APP_FLAVOR === 'MB1' ? 'Nirav patel, Equinix' : 'EQUINIX'}</Text> Navigation Service </Text>
                     <Text style={styles.inactiveText}>Scan QR to continue your service</Text>
                 </View>
 

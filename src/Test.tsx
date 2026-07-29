@@ -17,7 +17,7 @@ const Test = () => {
     useEffect(() => {
         const timer = setTimeout(() => {
             if (query == "") return;
-            const filteredData = products.filter((item) => item && item.employee_name && item.employee_name.includes(query));
+            const filteredData = products.filter((item) => item && item.employee_name && item.employee_name.contains(query));
             setProducts(filteredData);
         }, 500)
 

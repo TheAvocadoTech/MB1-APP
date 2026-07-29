@@ -3,8 +3,12 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-community/async-storage';
 import { store } from '../store/store';
 
+import { APP_FLAVOR } from '../config/flavor';
+
+const BASE_URL = APP_FLAVOR === 'MB1' ? 'http://192.168.20.10:8000/api/' : 'https://api.avocadotech.in/';
+
 const api = axios.create({
-    baseURL: 'https://api.avocadotech.in/',
+    baseURL: BASE_URL,
     timeout: 120000,
     headers: {
         'Content-Type': 'application/json',
@@ -13,7 +17,7 @@ const api = axios.create({
 });
 
 const publicApi = axios.create({
-    baseURL: 'https://api.avocadotech.in/',
+    baseURL: BASE_URL,
     timeout: 120000,
     headers: {
         'Content-Type': 'application/json',
@@ -22,7 +26,7 @@ const publicApi = axios.create({
 });
 
 const apiFormData = axios.create({
-    baseURL: 'https://api.avocadotech.in/',
+    baseURL: BASE_URL,
     timeout: 120000,
 });
 
@@ -203,7 +207,7 @@ export const fetchCabinetDetails = async (cabinetId: string) => {
     }
 };
 export const fetchVisitorAssignedCabinet = async (visitorId: string, idNumber: string="Tag1") => {
-      console.log("This is url >>", `https://api.avocadotech.in/api/IDVisitor/visitors/${visitorId}/cabinet`)
+      console.log("This is url >>", `${BASE_URL}api/IDVisitor/visitors/${visitorId}/cabinet`)
     try {
         const response = await publicApi.put(`/api/IDVisitor/visitors/${visitorId}/cabinet`, {
             idNumber: idNumber
@@ -256,7 +260,7 @@ export const fetchVisitorLocation = async (visitorId: string) => {
             targetId = "6a624b4560e3cc3ce7496ccd";
         }
 
-        console.log("This is location url  >>", `https://api.avocadotech.in/api/IDVisitor/visitors/${targetId}/location?includePath=true`);
+        console.log("This is location url  >>", `${BASE_URL}api/IDVisitor/visitors/${targetId}/location?includePath=true`);
         
         const response = await publicApi.get(`/api/IDVisitor/visitors/${targetId}/location?includePath=true`);
         console.log("This is fetch visitor location response ===>", response);

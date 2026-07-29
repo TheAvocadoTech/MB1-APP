@@ -9,13 +9,13 @@
 /* Begin PBXBuildFile section */
 		0C80B921A6F3F58F76C31292 /* libPods-Equinix.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DCACB8F33CDC322A6C60F78 /* libPods-Equinix.a */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		58A0B95E00DC4DB8B14B53CF /* InstrumentSansMedium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 1F3E9E6BADE5458AAD638F51 /* InstrumentSansMedium.ttf */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
+		856E736750BF46058060D7DF /* InstrumentSansSemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 86AC2A29F1354DE492BA4F86 /* InstrumentSansSemiBold.ttf */; };
 		9800F03FBB2022F9C01C8FF7 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 		E087EF60CEB14653880E8953 /* InstrumentSansBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2EF45F1C4F62439B8A1FB842 /* InstrumentSansBold.ttf */; };
-		58A0B95E00DC4DB8B14B53CF /* InstrumentSansMedium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 1F3E9E6BADE5458AAD638F51 /* InstrumentSansMedium.ttf */; };
 		FB89C8B4723D4876BFEEC5C7 /* InstrumentSansRegular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A440E23EF2F94ED0991CB306 /* InstrumentSansRegular.ttf */; };
-		856E736750BF46058060D7DF /* InstrumentSansSemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 86AC2A29F1354DE492BA4F86 /* InstrumentSansSemiBold.ttf */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -23,16 +23,16 @@
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = Equinix/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = Equinix/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = Equinix/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		1F3E9E6BADE5458AAD638F51 /* InstrumentSansMedium.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = InstrumentSansMedium.ttf; path = ../src/assets/fonts/InstrumentSansMedium.ttf; sourceTree = "<group>"; };
+		2EF45F1C4F62439B8A1FB842 /* InstrumentSansBold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = InstrumentSansBold.ttf; path = ../src/assets/fonts/InstrumentSansBold.ttf; sourceTree = "<group>"; };
 		3B4392A12AC88292D35C810B /* Pods-Equinix.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Equinix.debug.xcconfig"; path = "Target Support Files/Pods-Equinix/Pods-Equinix.debug.xcconfig"; sourceTree = "<group>"; };
 		5709B34CF0A7D63546082F79 /* Pods-Equinix.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Equinix.release.xcconfig"; path = "Target Support Files/Pods-Equinix/Pods-Equinix.release.xcconfig"; sourceTree = "<group>"; };
 		5DCACB8F33CDC322A6C60F78 /* libPods-Equinix.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-Equinix.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = Equinix/AppDelegate.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = Equinix/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		86AC2A29F1354DE492BA4F86 /* InstrumentSansSemiBold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = InstrumentSansSemiBold.ttf; path = ../src/assets/fonts/InstrumentSansSemiBold.ttf; sourceTree = "<group>"; };
+		A440E23EF2F94ED0991CB306 /* InstrumentSansRegular.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = InstrumentSansRegular.ttf; path = ../src/assets/fonts/InstrumentSansRegular.ttf; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
-		2EF45F1C4F62439B8A1FB842 /* InstrumentSansBold.ttf */ = {isa = PBXFileReference; name = "InstrumentSansBold.ttf"; path = "../src/assets/fonts/InstrumentSansBold.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
-		1F3E9E6BADE5458AAD638F51 /* InstrumentSansMedium.ttf */ = {isa = PBXFileReference; name = "InstrumentSansMedium.ttf"; path = "../src/assets/fonts/InstrumentSansMedium.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
-		A440E23EF2F94ED0991CB306 /* InstrumentSansRegular.ttf */ = {isa = PBXFileReference; name = "InstrumentSansRegular.ttf"; path = "../src/assets/fonts/InstrumentSansRegular.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
-		86AC2A29F1354DE492BA4F86 /* InstrumentSansSemiBold.ttf */ = {isa = PBXFileReference; name = "InstrumentSansSemiBold.ttf"; path = "../src/assets/fonts/InstrumentSansSemiBold.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -108,7 +108,7 @@
 			sourceTree = "<group>";
 		};
 		D5400D1F780F4186A528A97B /* Resources */ = {
-			isa = "PBXGroup";
+			isa = PBXGroup;
 			children = (
 				2EF45F1C4F62439B8A1FB842 /* InstrumentSansBold.ttf */,
 				1F3E9E6BADE5458AAD638F51 /* InstrumentSansMedium.ttf */,
@@ -116,8 +116,8 @@
 				86AC2A29F1354DE492BA4F86 /* InstrumentSansSemiBold.ttf */,
 			);
 			name = Resources;
-			sourceTree = "<group>";
 			path = "";
+			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 

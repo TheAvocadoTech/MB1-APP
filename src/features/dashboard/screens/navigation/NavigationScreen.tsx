@@ -14,6 +14,8 @@ import { ImageSource } from '../../../../constants/assets/images';
 import { MAP_BASE64_DATA } from '../../../../constants/assets/images/mapBase64Data';
 import { useTheme } from '../../../../theme/ThemeProvider';
 import { useStyles } from './NavigationScreen.styles';
+import { APP_FLAVOR } from '../../../../config/flavor';
+import { MB1_MAP_BASE64 } from '../../../../constants/assets/images/mb1MapBase64Data';
 
 /*
 const HTML_3D_RENDERER = `
@@ -602,7 +604,7 @@ const HTML_2D_RENDERER = `
                     <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#cbd5e1" stroke-width="0.8" opacity="0.4" />
                 </pattern>
             </defs>
-            <g transform="translate(0, 900) rotate(-90)">
+            <g id="map-rotation-group" transform="translate(0, 900) rotate(-90)">
                 <rect width="900" height="600" fill="#f1f5f9" />
                 <rect width="900" height="600" fill="url(#gridPattern)" />
                 <rect x="35" y="35" width="830" height="530" fill="#ffffff" stroke="#cbd5e1" stroke-width="2.5" rx="18" />
@@ -714,6 +716,36 @@ const HTML_2D_RENDERER = `
             loading.style.display = 'none';
             if (payload.modelBase64) mapImage.setAttribute('href', payload.modelBase64);
             const floor = payload.floor || 'GR';
+            const appFlavor = payload.appFlavor || 'MB3';
+
+            const svgEl = document.getElementById('map-svg');
+            const rotationGroup = document.getElementById('map-rotation-group');
+            if (appFlavor === 'MB1') {
+                if (svgEl) {
+                    svgEl.setAttribute('viewBox', '0 0 900 600');
+                    svgEl.setAttribute('width', '900');
+                    svgEl.setAttribute('height', '600');
+                }
+                if (rotationGroup) {
+                    rotationGroup.setAttribute('transform', 'translate(0, 0) rotate(0)');
+                }
+                scale = 1.0;
+                pointX = 0;
+                pointY = 0;
+            } else {
+                if (svgEl) {
+                    svgEl.setAttribute('viewBox', '0 0 600 900');
+                    svgEl.setAttribute('width', '600');
+                    svgEl.setAttribute('height', '900');
+                }
+                if (rotationGroup) {
+                    rotationGroup.setAttribute('transform', 'translate(0, 900) rotate(-90)');
+                }
+                scale = 3.2;
+                pointX = -320;
+                pointY = 0;
+            }
+
             const calib = FLOORPLAN_CALIBRATION[floor] || FLOORPLAN_CALIBRATION.GR;
             const imageGroup = document.getElementById('image-calibration-group');
             if (imageGroup) {
@@ -736,6 +768,7 @@ const HTML_2D_RENDERER = `
             const mapHeight = mapMeta.height || 5120;
             const activeWayfinding = visitorLocation?.wayfinding;
             const activeRoute = visitorLocation?.wayfinding?.route_to_destination;
+            const appFlavor = payload.appFlavor;
 
             const getSvgCoords = (x, y) => transformCoords(x, y, mapWidth, mapHeight);
 
@@ -794,13 +827,16 @@ const HTML_2D_RENDERER = `
             const polylineGroup = document.getElementById('polyline-group');
             if (polylineGroup) {
                 polylineGroup.innerHTML = '';
-                const bleLoc = visitorLocation?.location || { x: 5004.59, y: 2313.4 };
+                const appFlavor = payload.appFlavor || 'MB3';
+                const defaultBleLoc = appFlavor === 'MB1' ? { x: 800, y: 2100 } : { x: 5004.59, y: 2313.4 };
+                const bleLoc = visitorLocation?.location || defaultBleLoc;
                 const blePos = getSvgCoords(bleLoc.x, bleLoc.y);
                 const startPos = floor === "F1" ? getSvgCoords(F1_LIFT_COORDINATES.x, F1_LIFT_COORDINATES.y) : getSvgCoords(bleLoc.x, bleLoc.y);
                 const targetCoords = visitorLocation?.target_coordinates;
+                const defaultTargetCoords = appFlavor === 'MB1' ? { x: 5000, y: 2100 } : (floor === "GR" ? LIFT_COORDINATES : CABINET_COORDINATES);
                 const destPos = (targetCoords && targetCoords.x !== undefined && targetCoords.y !== undefined)
                     ? getSvgCoords(targetCoords.x, targetCoords.y)
-                    : (floor === "GR" ? getSvgCoords(LIFT_COORDINATES.x, LIFT_COORDINATES.y) : getSvgCoords(CABINET_COORDINATES.x, CABINET_COORDINATES.y));
+                    : getSvgCoords(defaultTargetCoords.x, defaultTargetCoords.y);
 
                 if (floor === "F1") {
                     const tempPt = getSvgCoords(TEMP_DOT_COORDINATES.x, TEMP_DOT_COORDINATES.y);
@@ -825,18 +861,44 @@ const HTML_2D_RENDERER = `
                 const rawWaypoints = activeRoute?.nodes || activeRoute?.path || activeRoute?.waypoints || [];
                 const backendWaypoints = extractWaypoints(rawWaypoints);
 
-                const refPts = [];
-                if (floor === "F1") {
-                    refPts.push(startPos);
-                    const n48 = allGraphNodes.find(n => n.name && (n.name.toUpperCase() === "N48" || n.name === "48"));
-                    refPts.push(n48?.position ? getSvgCoords(n48.position.x, n48.position.y) : getSvgCoords(5454.1586, 1711.6878));
-                    refPts.push(getSvgCoords(TEMP_DOT_COORDINATES.x, TEMP_DOT_COORDINATES.y));
-                    refPts.push(destPos);
+                if (appFlavor === 'MB1') {
+                    if (backendWaypoints.length >= 2) {
+                        const mb1Pts = backendWaypoints.map(pt => getSvgCoords(pt.x, pt.y));
+                        const pathD = mb1Pts.reduce((acc, pt, idx) => idx === 0 ? 'M ' + pt.svgX + ' ' + pt.svgY : acc + ' L ' + pt.svgX + ' ' + pt.svgY, '');
+                        
+                        const pathBg = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        pathBg.setAttribute('d', pathD); pathBg.setAttribute('fill', 'none');
+                        pathBg.setAttribute('stroke', 'rgba(0, 133, 255, 0.2)');
+                        pathBg.setAttribute('stroke-width', '6'); pathBg.setAttribute('stroke-linecap', 'round'); pathBg.setAttribute('stroke-linejoin', 'round');
+                        polylineGroup.appendChild(pathBg);
+
+                        const pathFg = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        pathFg.setAttribute('d', pathD); pathFg.setAttribute('fill', 'none');
+                        pathFg.setAttribute('stroke', '#0085ff');
+                        pathFg.setAttribute('stroke-width', '3'); pathFg.setAttribute('stroke-linecap', 'round'); pathFg.setAttribute('stroke-linejoin', 'round');
+                        pathFg.setAttribute('marker-end', 'url(#routeArrow)');
+                        polylineGroup.appendChild(pathFg);
+
+                        const pathCore = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        pathCore.setAttribute('d', pathD); pathCore.setAttribute('fill', 'none');
+                        pathCore.setAttribute('stroke', '#ffffff'); pathCore.setAttribute('stroke-width', '1.2');
+                        pathCore.setAttribute('stroke-linecap', 'round');
+                        pathCore.setAttribute('class', 'path-animated');
+                        polylineGroup.appendChild(pathCore);
+                    }
                 } else {
-                    refPts.push(startPos);
-                    backendWaypoints.forEach(pt => refPts.push(getSvgCoords(pt.x, pt.y)));
-                    refPts.push(destPos);
-                }
+                    const refPts = [];
+                    if (floor === "F1") {
+                        refPts.push(startPos);
+                        const n48 = allGraphNodes.find(n => n.name && (n.name.toUpperCase() === "N48" || n.name === "48"));
+                        refPts.push(n48?.position ? getSvgCoords(n48.position.x, n48.position.y) : getSvgCoords(5454.1586, 1711.6878));
+                        refPts.push(getSvgCoords(TEMP_DOT_COORDINATES.x, TEMP_DOT_COORDINATES.y));
+                        refPts.push(destPos);
+                    } else {
+                        refPts.push(startPos);
+                        backendWaypoints.forEach(pt => refPts.push(getSvgCoords(pt.x, pt.y)));
+                        refPts.push(destPos);
+                    }
 
                 if (refPts.length >= 2) {
                     const pathD = refPts.reduce((acc, pt, idx) => idx === 0 ? 'M ' + pt.svgX + ' ' + pt.svgY : acc + ' L ' + pt.svgX + ' ' + pt.svgY, '');
@@ -866,8 +928,9 @@ const HTML_2D_RENDERER = `
                         polylineGroup.appendChild(pathCore);
                     }
                 }
+                }
 
-                if (floor === "GR") {
+                if (appFlavor !== 'MB1' && floor === "GR") {
                     const propPts = [];
                     propPts.push(getSvgCoords(GR_PROPOSED_START_COORDINATES.x, GR_PROPOSED_START_COORDINATES.y));
                     const n9 = allGraphNodes.find(n => n.name && (n.name.toUpperCase() === "N9" || n.name === "9"));
@@ -891,7 +954,7 @@ const HTML_2D_RENDERER = `
                     }
                 }
 
-                if (floor === "F1") {
+                if (appFlavor !== 'MB1' && floor === "F1") {
                     const f1Pts = [];
                     f1Pts.push(blePos);
                     backendWaypoints.forEach(pt => f1Pts.push(getSvgCoords(pt.x, pt.y)));
@@ -1127,6 +1190,38 @@ const FLOOR_MAP_IDS = {
     F1: "cfa55e13-794f-4081-b1b7-e35f1ea67325"
 };
 
+const STATIC_MB1_VISITOR_LOCATION = {
+    visitor: {
+        id: "static-mb1",
+        name: "Nirav patel",
+        phone: "1234567890",
+        email: "nirav@avocadotech.in",
+        company: "Equinix",
+        idNumber: "Tag1",
+        purpose: "Meeting",
+        checkedIn: true,
+        checkedInAt: null,
+        qrExpiresAt: "2026-07-28T08:33:58.062Z"
+    },
+    location: {
+        x: 800,
+        y: 2100,
+        name: "Tag1",
+        mac: "ea2671f0003d",
+        map_id: "mb1-map",
+        ap_mac: "c878678a984c",
+        last_seen: 1785175442.0751295,
+        rssi: -59,
+        beam: 1,
+        stability: 1,
+        is_stable: true
+    },
+    target_coordinates: {
+        x: 5000,
+        y: 2100
+    }
+};
+
 const NavigationScreen = () => {
     const navigation = useNavigation<NativeStackNavigationProp<any>>();
     const route = useRoute<RouteProp<RouteParams, 'NavigationScreen'>>();
@@ -1136,10 +1231,13 @@ const NavigationScreen = () => {
     // Fetch cabinet data from Redux
     const { cabinetDetails, visitorAssignedCabinet, visitorLocation } = useSelector((state: RootState) => state.cabinet);
 
+    // Resolve activeVisitorLocation incorporating MB1 static defaults if null
+    const activeVisitorLocation = visitorLocation || (APP_FLAVOR === 'MB1' ? STATIC_MB1_VISITOR_LOCATION : null);
+
     const { colors } = useTheme();
     const styles = useStyles(colors);
 
-    const [selectedFloor, setSelectedFloor] = useState<string>('F1');
+    const [selectedFloor, setSelectedFloor] = useState<string>(APP_FLAVOR === 'MB1' ? 'GR' : 'F1');
     const [modelBase64, setModelBase64] = useState<string | null>(null);
     const [loadingModel, setLoadingModel] = useState<boolean>(true);
     const [pickedModelCoordinate, setPickedModelCoordinate] = useState<ModelCoordinate | null>(null);
@@ -1150,18 +1248,22 @@ const NavigationScreen = () => {
     // route over the first-floor model puts otherwise-correct coordinates in
     // the wrong physical layout.
     useEffect(() => {
-        const mapName = visitorLocation?.map?.name?.toUpperCase();
+        if (APP_FLAVOR === 'MB1') {
+            setSelectedFloor('GR');
+            return;
+        }
+        const mapName = activeVisitorLocation?.map?.name?.toUpperCase();
 
         if (mapName?.includes('F00') || mapName?.includes('GROUND')) {
             setSelectedFloor('GR');
         } else if (mapName?.includes('F01') || mapName?.includes('F02')) {
             setSelectedFloor('F1');
         }
-    }, [visitorLocation?.map?.name]);
+    }, [activeVisitorLocation?.map?.name]);
 
     // Fetch live location and update every 3 seconds using setInterval
     useEffect(() => {
-        const visitorId = visitorLocation?.visitor?.id || visitorLocation?.id;
+        const visitorId = activeVisitorLocation?.visitor?.id || activeVisitorLocation?.id;
         if (!visitorId) return;
 
         const pollLocation = () => {
@@ -1173,11 +1275,11 @@ const NavigationScreen = () => {
 
         const interval = setInterval(pollLocation, 3000);
         return () => clearInterval(interval);
-    }, [dispatch, visitorLocation?.visitor?.id || visitorLocation?.id]);
+    }, [dispatch, activeVisitorLocation?.visitor?.id || activeVisitorLocation?.id]);
 
     // Watch visitorLocation and selectedFloor, calculate path route dynamically, and merge
     useEffect(() => {
-        if (!visitorLocation) {
+        if (!activeVisitorLocation) {
             setMergedVisitorLocation(null);
             return;
         }
@@ -1185,13 +1287,46 @@ const NavigationScreen = () => {
         let isMounted = true;
 
         const fetchRoute = async () => {
+            if (APP_FLAVOR === 'MB1') {
+                const staticMb1Route = {
+                    waypoints: [
+                        { x: 800, y: 2100 },
+                        { x: 1000, y: 1750 },
+                        { x: 1200, y: 1750 },
+                        { x: 1350, y: 2100 },
+                        { x: 1550, y: 2100 },
+                        { x: 2200, y: 2100 },
+                        { x: 2600, y: 2100 },
+                        { x: 3000, y: 2100 },
+                        { x: 3000, y: 1750 },
+                        { x: 3800, y: 1750 },
+                        { x: 4200, y: 1750 },
+                        { x: 4200, y: 2100 },
+                        { x: 4600, y: 2100 },
+                        { x: 5000, y: 2100 }
+                    ]
+                };
+                
+                if (isMounted) {
+                    const merged = {
+                        ...activeVisitorLocation,
+                        wayfinding: {
+                            ...(activeVisitorLocation?.wayfinding || {}),
+                            route_to_destination: staticMb1Route
+                        }
+                    };
+                    setMergedVisitorLocation(merged);
+                }
+                return;
+            }
+
             const floor = selectedFloor;
-            const bleX = visitorLocation?.location?.x;
-            const bleY = visitorLocation?.location?.y;
-            const targetCoords = visitorLocation?.target_coordinates;
+            const bleX = activeVisitorLocation?.location?.x;
+            const bleY = activeVisitorLocation?.location?.y;
+            const targetCoords = activeVisitorLocation?.target_coordinates;
 
             if (bleX === undefined || bleY === undefined) {
-                if (isMounted) setMergedVisitorLocation(visitorLocation);
+                if (isMounted) setMergedVisitorLocation(activeVisitorLocation);
                 return;
             }
 
@@ -1214,9 +1349,9 @@ const NavigationScreen = () => {
             
             if (isMounted) {
                 const merged = {
-                    ...visitorLocation,
+                    ...activeVisitorLocation,
                     wayfinding: {
-                        ...(visitorLocation?.wayfinding || {}),
+                        ...(activeVisitorLocation?.wayfinding || {}),
                         route_to_destination: routePayload
                     }
                 };
@@ -1229,7 +1364,7 @@ const NavigationScreen = () => {
         return () => {
             isMounted = false;
         };
-    }, [visitorLocation, selectedFloor]);
+    }, [activeVisitorLocation, selectedFloor]);
 
     const handleBack = () => {
         navigation.goBack();
@@ -1281,7 +1416,10 @@ const NavigationScreen = () => {
     // Load 2D Map image file as base64 when selectedFloor changes
     useEffect(() => {
         setLoadingModel(true);
-        const base64data = selectedFloor === 'GR' ? MAP_BASE64_DATA.GR : MAP_BASE64_DATA.F1;
+        let base64data = selectedFloor === 'GR' ? MAP_BASE64_DATA.GR : MAP_BASE64_DATA.F1;
+        if (APP_FLAVOR === 'MB1') {
+            base64data = MB1_MAP_BASE64;
+        }
         setModelBase64(base64data);
         setLoadingModel(false);
     }, [selectedFloor]);
@@ -1290,12 +1428,13 @@ const NavigationScreen = () => {
         if (modelBase64 && webViewRef.current) {
             console.log('WebView loaded, injecting initial 2D map and route payload...');
             
-            const activeLoc = mergedVisitorLocation || visitorLocation;
+            const activeLoc = mergedVisitorLocation || activeVisitorLocation;
             const payload = JSON.stringify({
                 modelBase64,
                 cabinetName,
                 floor: selectedFloor,
-                visitorLocation: activeLoc
+                visitorLocation: activeLoc,
+                appFlavor: APP_FLAVOR
             });
 
             webViewRef.current.injectJavaScript(`
@@ -1309,12 +1448,13 @@ const NavigationScreen = () => {
     useEffect(() => {
         if (modelBase64 && webViewRef.current) {
             console.log('Floor or model image changed, injecting loadModel payload...');
-            const activeLoc = mergedVisitorLocation || visitorLocation;
+            const activeLoc = mergedVisitorLocation || activeVisitorLocation;
             const payload = JSON.stringify({
                 modelBase64,
                 cabinetName,
                 floor: selectedFloor,
-                visitorLocation: activeLoc
+                visitorLocation: activeLoc,
+                appFlavor: APP_FLAVOR
             });
             webViewRef.current.injectJavaScript(`
                 if (window.loadModel) {
@@ -1329,23 +1469,24 @@ const NavigationScreen = () => {
 
     // Push real-time coordinates, route, and marker updates to the WebView
     useEffect(() => {
-        const activeLoc = mergedVisitorLocation || visitorLocation;
+        const activeLoc = mergedVisitorLocation || activeVisitorLocation;
         if (webViewRef.current && activeLoc) {
             const payload = JSON.stringify({
                 cabinetName,
                 floor: selectedFloor,
-                visitorLocation: activeLoc
+                visitorLocation: activeLoc,
+                appFlavor: APP_FLAVOR
             });
             webViewRef.current.injectJavaScript(`
                 if (window.updateLocation) {
                     window.updateLocation(${payload});
                 } else if (window.loadModel) {
-                    window.loadModel(Object.assign({ floor: "${selectedFloor}", visitorLocation: ${JSON.stringify(activeLoc)}, cabinetName: "${cabinetName}" }, window.cachedPayload || {}));
+                    window.loadModel(Object.assign({ floor: "${selectedFloor}", visitorLocation: ${JSON.stringify(activeLoc)}, cabinetName: "${cabinetName}", appFlavor: "${APP_FLAVOR}" }, window.cachedPayload || {}));
                 }
                 void(0);
             `);
         }
-    }, [mergedVisitorLocation, visitorLocation, visitorAssignedCabinet, cabinetName]);
+    }, [mergedVisitorLocation, activeVisitorLocation, visitorAssignedCabinet, cabinetName]);
 
     return (
         <SafeAreaView edges={['bottom', 'top']} style={styles.container}>
