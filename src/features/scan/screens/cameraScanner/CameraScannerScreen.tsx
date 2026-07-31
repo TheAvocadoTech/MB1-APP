@@ -272,7 +272,7 @@ const CameraScannerScreen = () => {
     });
 
     const qrValue = APP_FLAVOR === 'MB1'
-        ? 'http://192.168.20.10:8000/temp'
+        ? 'http://192.168.20.10:3000/'
         : 'https://equinix-temp.avocadotech.in/';
 
     // Render loading or error states

@@ -573,6 +573,75 @@ const HTML_3D_RENDERER = `
 `;
 */
 
+
+
+const MB1_HTML_PDF_RENDERER = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+    <style>
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #f1f5f9; }
+        #viewport { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
+        /* Keep the canvas in its natural horizontal orientation */
+        canvas { max-width: 100%; max-height: 100%; }
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-family: sans-serif; font-size: 16px; color: #87848A; text-align: center; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+</head>
+<body>
+    <div id="loading">Loading PDF Map...</div>
+    <div id="viewport">
+        <canvas id="pdf-canvas"></canvas>
+    </div>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+        
+        window.loadModel = function(payload) {
+            if (!payload || !payload.modelBase64) return;
+            const url = payload.modelBase64;
+            
+            let pdfParams = url;
+            if (url.startsWith('data:application/pdf;base64,')) {
+                const base64 = url.split(',')[1];
+                const raw = window.atob(base64);
+                const rawLength = raw.length;
+                const array = new Uint8Array(new ArrayBuffer(rawLength));
+                for(let i = 0; i < rawLength; i++) {
+                    array[i] = raw.charCodeAt(i);
+                }
+                pdfParams = { data: array };
+            }
+
+            const loadingTask = pdfjsLib.getDocument(pdfParams);
+            loadingTask.promise.then(function(pdf) {
+                document.getElementById('loading').style.display = 'none';
+                pdf.getPage(1).then(function(page) {
+                    const viewport = page.getViewport({scale: 2.0});
+                    const canvas = document.getElementById('pdf-canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                    
+                    const renderContext = {
+                        canvasContext: context,
+                        viewport: viewport
+                    };
+                    page.render(renderContext);
+                });
+            }).catch(function(error) {
+                document.getElementById('loading').innerText = 'Error loading PDF:\\n' + error.message;
+            });
+        };
+
+        window.updateLocation = function(payload) {
+            // No-op for MB1 since polylines are pre-drawn in PDF
+        };
+    </script>
+</body>
+</html>
+`;
+
 const HTML_2D_RENDERER = `
 <!DOCTYPE html>
 <html>
@@ -778,27 +847,29 @@ const HTML_2D_RENDERER = `
             const edgesGroup = document.getElementById('edges-group');
             if (edgesGroup) {
                 edgesGroup.innerHTML = '';
-                const nodeMap = new Map();
-                allGraphNodes.forEach(n => { if (n.name && n.position) nodeMap.set(n.name, getSvgCoords(n.position.x, n.position.y)); });
-                const drawn = new Set();
-                allGraphNodes.forEach(n => {
-                    const srcPt = nodeMap.get(n.name);
-                    if (srcPt && n.edges) {
-                        Object.keys(n.edges).forEach(tName => {
-                            const tgtPt = nodeMap.get(tName);
-                            const edgeKey = [n.name, tName].sort().join("---");
-                            if (tgtPt && !drawn.has(edgeKey)) {
-                                drawn.add(edgeKey);
-                                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                                line.setAttribute('x1', srcPt.svgX); line.setAttribute('y1', srcPt.svgY);
-                                line.setAttribute('x2', tgtPt.svgX); line.setAttribute('y2', tgtPt.svgY);
-                                line.setAttribute('stroke', '#cbd5e1'); line.setAttribute('stroke-width', '2');
-                                line.setAttribute('stroke-dasharray', '4 4');
-                                edgesGroup.appendChild(line);
-                            }
-                        });
-                    }
-                });
+                if (appFlavor !== 'MB1') {
+                    const nodeMap = new Map();
+                    allGraphNodes.forEach(n => { if (n.name && n.position) nodeMap.set(n.name, getSvgCoords(n.position.x, n.position.y)); });
+                    const drawn = new Set();
+                    allGraphNodes.forEach(n => {
+                        const srcPt = nodeMap.get(n.name);
+                        if (srcPt && n.edges) {
+                            Object.keys(n.edges).forEach(tName => {
+                                const tgtPt = nodeMap.get(tName);
+                                const edgeKey = [n.name, tName].sort().join("---");
+                                if (tgtPt && !drawn.has(edgeKey)) {
+                                    drawn.add(edgeKey);
+                                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                                    line.setAttribute('x1', srcPt.svgX); line.setAttribute('y1', srcPt.svgY);
+                                    line.setAttribute('x2', tgtPt.svgX); line.setAttribute('y2', tgtPt.svgY);
+                                    line.setAttribute('stroke', '#cbd5e1'); line.setAttribute('stroke-width', '2');
+                                    line.setAttribute('stroke-dasharray', '4 4');
+                                    edgesGroup.appendChild(line);
+                                }
+                            });
+                        }
+                    });
+                }
             }
 
             const nodesGroup = document.getElementById('nodes-group');
@@ -862,30 +933,7 @@ const HTML_2D_RENDERER = `
                 const backendWaypoints = extractWaypoints(rawWaypoints);
 
                 if (appFlavor === 'MB1') {
-                    if (backendWaypoints.length >= 2) {
-                        const mb1Pts = backendWaypoints.map(pt => getSvgCoords(pt.x, pt.y));
-                        const pathD = mb1Pts.reduce((acc, pt, idx) => idx === 0 ? 'M ' + pt.svgX + ' ' + pt.svgY : acc + ' L ' + pt.svgX + ' ' + pt.svgY, '');
-                        
-                        const pathBg = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                        pathBg.setAttribute('d', pathD); pathBg.setAttribute('fill', 'none');
-                        pathBg.setAttribute('stroke', 'rgba(0, 133, 255, 0.2)');
-                        pathBg.setAttribute('stroke-width', '6'); pathBg.setAttribute('stroke-linecap', 'round'); pathBg.setAttribute('stroke-linejoin', 'round');
-                        polylineGroup.appendChild(pathBg);
-
-                        const pathFg = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                        pathFg.setAttribute('d', pathD); pathFg.setAttribute('fill', 'none');
-                        pathFg.setAttribute('stroke', '#0085ff');
-                        pathFg.setAttribute('stroke-width', '3'); pathFg.setAttribute('stroke-linecap', 'round'); pathFg.setAttribute('stroke-linejoin', 'round');
-                        pathFg.setAttribute('marker-end', 'url(#routeArrow)');
-                        polylineGroup.appendChild(pathFg);
-
-                        const pathCore = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                        pathCore.setAttribute('d', pathD); pathCore.setAttribute('fill', 'none');
-                        pathCore.setAttribute('stroke', '#ffffff'); pathCore.setAttribute('stroke-width', '1.2');
-                        pathCore.setAttribute('stroke-linecap', 'round');
-                        pathCore.setAttribute('class', 'path-animated');
-                        polylineGroup.appendChild(pathCore);
-                    }
+                    // Do nothing for MB1, polyline is pre-drawn in the map image itself.
                 } else {
                     const refPts = [];
                     if (floor === "F1") {
@@ -1511,12 +1559,16 @@ const NavigationScreen = () => {
                 <WebViewComponent
                     ref={webViewRef}
                     originWhitelist={['*']}
-                    source={{ html: HTML_2D_RENDERER }}
+                    source={{ 
+                        html: APP_FLAVOR === 'MB1' ? MB1_HTML_PDF_RENDERER : HTML_2D_RENDERER,
+                        baseUrl: typeof MB1_MAP_BASE64 === 'string' && MB1_MAP_BASE64.startsWith('http') ? MB1_MAP_BASE64.substring(0, MB1_MAP_BASE64.indexOf('/', 8)) : 'http://localhost:8081'
+                    }}
                     style={{ flex: 1 }}
                     onLoadEnd={handleWebViewLoadEnd}
                     onMessage={handleWebViewMessage}
                     javaScriptEnabled={true}
                     domStorageEnabled={true}
+                    mixedContentMode="always"
                 />
                 
                 {loadingModel && (
