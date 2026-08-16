@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, Image, TouchableOpacity, ActivityIndicator, Alert, Linking } from 'react-native';
+import { View, Image, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { WebView } from 'react-native-webview';
+import { Camera, DefaultLight, FilamentScene, FilamentView, Model, useCameraManipulator } from 'react-native-filament';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../../../store/store';
 import { getVisitorLocation } from '../../../../store/slices/cabinetSlice';
-import { getNavigationRoute, getMapDetails } from '../../../../services/ApiUtility';
+import { getNavigationRoute } from '../../../../services/ApiUtility';
 
 import { default as Text } from '../../../../components/Text/MSText';
 import { ImageSource } from '../../../../constants/assets/images';
@@ -15,9 +16,12 @@ import { MAP_BASE64_DATA } from '../../../../constants/assets/images/mapBase64Da
 import { useTheme } from '../../../../theme/ThemeProvider';
 import { useStyles } from './NavigationScreen.styles';
 import { APP_FLAVOR } from '../../../../config/flavor';
-import { MB1_MAP_BASE64 } from '../../../../constants/assets/images/mb1MapBase64Data';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { MB1NativeMap3D } from '../../../../components/Map/MB1NativeMap3D';
 
-/*
+// Retained temporarily as the former WebView implementation while MB1 uses
+// the native Filament renderer below.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const HTML_3D_RENDERER = `
 <!DOCTYPE html>
 <html>
@@ -34,11 +38,26 @@ const HTML_3D_RENDERER = `
             font-family: sans-serif;
             font-size: 16px;
             color: #87848A;
+            z-index: 10;
+            max-width: 80vw;
+            text-align: center;
         }
     </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script>
+        function reportStartupError(message) {
+            const loading = document.getElementById('loading');
+            if (loading) loading.innerText = message;
+            if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ERROR', message: message }));
+            }
+        }
+        window.addEventListener('error', function(event) {
+            reportStartupError('3D map error: ' + (event.message || 'Unknown WebView error'));
+        });
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" onerror="reportStartupError('Unable to load the Three.js renderer. Check the device internet connection.')"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js" onerror="reportStartupError('Unable to load GLTFLoader. Check the device internet connection.')"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js" onerror="reportStartupError('Unable to load OrbitControls. Check the device internet connection.')"></script>
 </head>
 <body>
     <div id="loading">Loading 3D Map...</div>
@@ -156,9 +175,21 @@ const HTML_3D_RENDERER = `
             window.navigationNodeObjects = [];
         };
 
-        window.loadModel = function(base64Data, cabinetName) {
+        window.loadModel = function(payload) {
             const loadingEl = document.getElementById('loading');
-            if (loadingEl) loadingEl.style.display = 'none';
+            const modelUri = typeof payload === 'string' ? payload : payload && payload.modelUri;
+            const cabinetName = typeof payload === 'string' ? undefined : payload && payload.cabinetName;
+
+            if (!modelUri) {
+                if (loadingEl) loadingEl.innerText = '3D map file is unavailable';
+                sendToNative({ type: 'ERROR', message: 'No GLB model URI was provided to the 3D renderer.' });
+                return;
+            }
+
+            if (loadingEl) {
+                loadingEl.style.display = 'block';
+                loadingEl.innerText = 'Loading 3D Map...';
+            }
             
             // Clean up previous model to prevent overlapping models and memory leaks
             if (currentModel) {
@@ -182,7 +213,7 @@ const HTML_3D_RENDERER = `
             }
 
             const loader = new THREE.GLTFLoader();
-            loader.load(base64Data, function(gltf) {
+            loader.load(modelUri, function(gltf) {
                 currentModel = gltf.scene;
                 scene.add(currentModel);
 
@@ -254,9 +285,13 @@ const HTML_3D_RENDERER = `
                     const c = window.cachedNavigationNodes;
                     window.drawNavigationNodes(c.nodes, c.routeNodeNames, c.mapMeta);
                 }
+                if (loadingEl) loadingEl.style.display = 'none';
+                window.updateLocation(payload);
+                sendToNative({ type: 'MODEL_READY' });
             }, undefined, function(error) {
                 if (loadingEl) loadingEl.innerText = 'Failed to load 3D Map';
                 console.error('Error loading GLB:', error);
+                sendToNative({ type: 'ERROR', message: 'Failed to load GLB: ' + (error && error.message ? error.message : String(error)) });
             });
         };
 
@@ -531,6 +566,40 @@ const HTML_3D_RENDERER = `
             });
         };
 
+        function extractRoutePoints(visitorLocation) {
+            const route = visitorLocation && visitorLocation.wayfinding && visitorLocation.wayfinding.route_to_destination;
+            const rawPoints = Array.isArray(route)
+                ? route
+                : (route && (route.nodes || route.waypoints || route.path)) || [];
+            const points = [];
+            const addPoint = function(point) {
+                const value = point && (point.position || point);
+                const x = Number(value && value.x);
+                const y = Number(value && value.y);
+                const previous = points[points.length - 1];
+                if (Number.isFinite(x) && Number.isFinite(y) && (!previous || previous.x !== x || previous.y !== y)) {
+                    points.push({ x: x, y: y });
+                }
+            };
+
+            addPoint(visitorLocation && visitorLocation.location);
+            rawPoints.forEach(addPoint);
+            addPoint(visitorLocation && (visitorLocation.target_coordinates || visitorLocation.cabinet));
+            return points;
+        }
+
+        // Location updates must not reload the 37 MB GLB. They only redraw its
+        // route overlay once the API provides map calibration metadata.
+        window.updateLocation = function(payload) {
+            const visitorLocation = payload && payload.visitorLocation;
+            const mapMeta = visitorLocation && visitorLocation.map;
+            const points = extractRoutePoints(visitorLocation);
+
+            if (mapMeta && points.length >= 2) {
+                window.drawPolyline(points, mapMeta);
+            }
+        };
+
         window.zoomIn = function() {
             isAnimating = false;
             camera.position.multiplyScalar(0.8);
@@ -567,80 +636,16 @@ const HTML_3D_RENDERER = `
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
+
+        if (window.cachedPayload) {
+            window.loadModel(window.cachedPayload);
+        }
     </script>
 </body>
 </html>
 `;
-*/
 
 
-
-const MB1_HTML_PDF_RENDERER = `
-<!DOCTYPE html>
-<html>
-<head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
-    <style>
-        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #f1f5f9; }
-        #viewport { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
-        /* Keep the canvas in its natural horizontal orientation */
-        canvas { max-width: 100%; max-height: 100%; }
-        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-family: sans-serif; font-size: 16px; color: #87848A; text-align: center; }
-    </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-</head>
-<body>
-    <div id="loading">Loading PDF Map...</div>
-    <div id="viewport">
-        <canvas id="pdf-canvas"></canvas>
-    </div>
-    <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-        
-        window.loadModel = function(payload) {
-            if (!payload || !payload.modelBase64) return;
-            const url = payload.modelBase64;
-            
-            let pdfParams = url;
-            if (url.startsWith('data:application/pdf;base64,')) {
-                const base64 = url.split(',')[1];
-                const raw = window.atob(base64);
-                const rawLength = raw.length;
-                const array = new Uint8Array(new ArrayBuffer(rawLength));
-                for(let i = 0; i < rawLength; i++) {
-                    array[i] = raw.charCodeAt(i);
-                }
-                pdfParams = { data: array };
-            }
-
-            const loadingTask = pdfjsLib.getDocument(pdfParams);
-            loadingTask.promise.then(function(pdf) {
-                document.getElementById('loading').style.display = 'none';
-                pdf.getPage(1).then(function(page) {
-                    const viewport = page.getViewport({scale: 2.0});
-                    const canvas = document.getElementById('pdf-canvas');
-                    const context = canvas.getContext('2d');
-                    canvas.height = viewport.height;
-                    canvas.width = viewport.width;
-                    
-                    const renderContext = {
-                        canvasContext: context,
-                        viewport: viewport
-                    };
-                    page.render(renderContext);
-                });
-            }).catch(function(error) {
-                document.getElementById('loading').innerText = 'Error loading PDF:\\n' + error.message;
-            });
-        };
-
-        window.updateLocation = function(payload) {
-            // No-op for MB1 since polylines are pre-drawn in PDF
-        };
-    </script>
-</body>
-</html>
-`;
 
 const HTML_2D_RENDERER = `
 <!DOCTYPE html>
@@ -1189,49 +1194,124 @@ const HTML_2D_RENDERER = `
 
 const WebViewComponent = WebView as any;
 
+// Metro already treats .glb files as bundled assets (see metro.config.js).
+// Resolve a URI once and let the WebView stream the binary model directly.
+// Do not convert this 37.6 MB asset to Base64: that would add roughly 50 MB to
+// the JS/WebView bridge and makes lower-memory devices unstable.
+
+/**
+ * Native 3D renderer for MB1. This deliberately avoids WebView, Three.js and
+ * remote scripts: Filament loads the Metro-bundled GLB directly on the native
+ * graphics thread. `transformToUnitCube` makes the initial camera independent
+ * of the model's original Blender/CAD scale.
+ */
+// const MB1NativeMap3D = () => {
+//    const MB1_CAMPUS_GLB =
+//     require('../../../../assets/Images/GRFloor.glb');
+
+
+//   const cameraManipulator = useCameraManipulator({
+//     orbitHomePosition: [0, 100, 300],
+//     targetPosition: [0, 0, 0],
+//     upVector: [0, 1, 0],
+
+//     orbitSpeed: [0.01, 0.01],
+//     zoomSpeed: [0.05],
+//   });
+
+//   const panGesture = Gesture.Pan()
+//     .onBegin((event) => {
+//       cameraManipulator?.grabBegin(
+//         event.x,
+//         event.y,
+//         false
+//       );
+//     })
+//     .onUpdate((event) => {
+//       cameraManipulator?.grabUpdate(
+//         event.x,
+//         event.y
+//       );
+//     })
+//     .onEnd(() => {
+//       cameraManipulator?.grabEnd();
+//     })
+//     .onFinalize(() => {
+//       cameraManipulator?.grabEnd();
+//     });
+
+//   const pinchGesture = Gesture.Pinch()
+//     .onUpdate((event) => {
+//       const delta = -(event.scale - 1) * 10;
+
+//       cameraManipulator?.scroll(
+//         event.focalX,
+//         event.focalY,
+//         delta
+//       );
+//     });
+
+//   const composedGesture = Gesture.Simultaneous(
+//     panGesture,
+//     pinchGesture
+//   );
+
+//  return (
+//    <GestureDetector gesture={composedGesture}>
+//       <View
+//         style={{
+//           flex: 1,
+//           width: '100%',
+//           height: '100%',
+//         }}
+//       >
+//         <FilamentView
+//           style={{
+//             flex: 1,
+//             width: '100%',
+//             height: '100%',
+//           }}
+//         >
+//           <DefaultLight />
+
+//           <Camera
+//             cameraManipulator={cameraManipulator}
+//             near={0.1}
+//             far={100000}
+//           />
+
+//           <Model
+//             source={MB1_CAMPUS_GLB}
+//           />
+//         </FilamentView>
+//       </View>
+//     </GestureDetector>
+//   );
+
+// };
+
+const styles = StyleSheet.create({
+   container: {
+    flex: 1,
+  },
+  filamentView: {
+    flex: 1,
+  },
+  gestureContainer: {
+    flex: 1,
+  },
+
+});
+
 type RouteParams = {
     NavigationScreen: {
         cabinetName?: string;
     };
 };
 
-type MapPoint = { x: number; y: number };
 type ModelCoordinate = { x: number; y: number; z: number; meshName: string };
 
-const toMapPoint = (value: any): MapPoint | null => {
-    const x = Number(value?.x);
-    const y = Number(value?.y);
-
-    return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
-};
-
-/**
- * The location API supplies the route as map pixels. Keep the order returned by
- * `route_to_destination.nodes`: it is already the shortest path from source to
- * destination. The renderer converts these pixels to the GLB's world space.
- */
-const buildRoutePoints = (visitorLocation: any, visitorAssignedCabinet: any): MapPoint[] => {
-    const candidates = [
-        visitorLocation?.location,
-        ...(visitorLocation?.wayfinding?.route_to_destination?.nodes ?? []).map((node: any) => node?.position),
-        visitorLocation?.target_coordinates ?? visitorAssignedCabinet?.cabinet,
-    ];
-
-    return candidates.reduce<MapPoint[]>((points, candidate) => {
-        const point = toMapPoint(candidate);
-        const previous = points[points.length - 1];
-
-        // The nearest node can match the current location. Avoid rendering a
-        // zero-length tube for that common case.
-        if (point && (!previous || previous.x !== point.x || previous.y !== point.y)) {
-            points.push(point);
-        }
-        return points;
-    }, []);
-};
-
 const LIFT_COORDINATES = { x: 5220.46912942509, y: 1681.3904907165097 };
-const F1_LIFT_COORDINATES = { x: 5720.46912942509, y: 1681.3904907165097 };
 const CABINET_COORDINATES = { x: 5620.3, y: 2200.84 };
 const FLOOR_MAP_IDS = {
     GR: "30141417-44ea-4982-993c-6225c9f08315",
@@ -1281,6 +1361,7 @@ const NavigationScreen = () => {
 
     // Resolve activeVisitorLocation incorporating MB1 static defaults if null
     const activeVisitorLocation = visitorLocation || (APP_FLAVOR === 'MB1' ? STATIC_MB1_VISITOR_LOCATION : null);
+    const visitorId = activeVisitorLocation?.visitor?.id || activeVisitorLocation?.id;
 
     const { colors } = useTheme();
     const styles = useStyles(colors);
@@ -1311,7 +1392,6 @@ const NavigationScreen = () => {
 
     // Fetch live location and update every 3 seconds using setInterval
     useEffect(() => {
-        const visitorId = activeVisitorLocation?.visitor?.id || activeVisitorLocation?.id;
         if (!visitorId) return;
 
         const pollLocation = () => {
@@ -1323,7 +1403,7 @@ const NavigationScreen = () => {
 
         const interval = setInterval(pollLocation, 3000);
         return () => clearInterval(interval);
-    }, [dispatch, activeVisitorLocation?.visitor?.id || activeVisitorLocation?.id]);
+    }, [dispatch, visitorId]);
 
     // Watch visitorLocation and selectedFloor, calculate path route dynamically, and merge
     useEffect(() => {
@@ -1444,10 +1524,13 @@ const NavigationScreen = () => {
                     z: Number(message.z),
                     meshName: String(message.meshName || 'Unnamed mesh'),
                 });
+            } else if (message?.type === 'MODEL_READY') {
+                setLoadingModel(false);
             } else if (message?.type === 'LOG') {
                 console.log('[WebView Log]', message.message);
             } else if (message?.type === 'ERROR') {
                 console.error('[WebView Error]', message.message);
+                setLoadingModel(false);
             }
         } catch {
             // Ignore non-JSON WebView messages.
@@ -1461,24 +1544,29 @@ const NavigationScreen = () => {
         }
     };
 
-    // Load 2D Map image file as base64 when selectedFloor changes
+    // MB1's native Filament view loads its GLB directly. MB3 keeps its existing
+    // 2D Base64-map WebView flow.
     useEffect(() => {
+        if (APP_FLAVOR === 'MB1') {
+            setModelBase64(null);
+            setLoadingModel(false);
+            return;
+        }
+
         setLoadingModel(true);
         let base64data = selectedFloor === 'GR' ? MAP_BASE64_DATA.GR : MAP_BASE64_DATA.F1;
-        if (APP_FLAVOR === 'MB1') {
-            base64data = MB1_MAP_BASE64;
-        }
         setModelBase64(base64data);
         setLoadingModel(false);
     }, [selectedFloor]);
 
     const handleWebViewLoadEnd = () => {
         if (modelBase64 && webViewRef.current) {
-            console.log('WebView loaded, injecting initial 2D map and route payload...');
+            console.log('WebView loaded, injecting initial map payload...');
             
             const activeLoc = mergedVisitorLocation || activeVisitorLocation;
             const payload = JSON.stringify({
                 modelBase64,
+                modelUri: APP_FLAVOR === 'MB1' ? modelBase64 : undefined,
                 cabinetName,
                 floor: selectedFloor,
                 visitorLocation: activeLoc,
@@ -1492,13 +1580,15 @@ const NavigationScreen = () => {
         }
     };
 
-    // Load or reload the floor plan background image when modelBase64 or floor changes
+    // Reload the map only when its source/floor changes. Live route updates use
+    // updateLocation and therefore do not reload the MB1 GLB.
     useEffect(() => {
         if (modelBase64 && webViewRef.current) {
             console.log('Floor or model image changed, injecting loadModel payload...');
             const activeLoc = mergedVisitorLocation || activeVisitorLocation;
             const payload = JSON.stringify({
                 modelBase64,
+                modelUri: APP_FLAVOR === 'MB1' ? modelBase64 : undefined,
                 cabinetName,
                 floor: selectedFloor,
                 visitorLocation: activeLoc,
@@ -1513,6 +1603,9 @@ const NavigationScreen = () => {
                 void(0);
             `);
         }
+    // Changing a live location must only update the route, not re-download and
+    // parse the GLB. The payload's location is refreshed by updateLocation below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [modelBase64, selectedFloor]);
 
     // Push real-time coordinates, route, and marker updates to the WebView
@@ -1534,7 +1627,7 @@ const NavigationScreen = () => {
                 void(0);
             `);
         }
-    }, [mergedVisitorLocation, activeVisitorLocation, visitorAssignedCabinet, cabinetName]);
+    }, [mergedVisitorLocation, activeVisitorLocation, visitorAssignedCabinet, cabinetName, selectedFloor]);
 
     return (
         <SafeAreaView edges={['bottom', 'top']} style={styles.container}>
@@ -1556,21 +1649,31 @@ const NavigationScreen = () => {
 
             {/* Main datacenter map canvas */}
             <View style={styles.mapContainer}>
+                {APP_FLAVOR === 'MB1' ? (
+                    // <FilamentScene>
+                    //     <MB1NativeMap3D />
+                    // </FilamentScene>
+                     <MB1NativeMap3D />
+                   
+                ) : (
                 <WebViewComponent
                     ref={webViewRef}
-                    originWhitelist={['*']}
-                    source={{ 
-                        html: APP_FLAVOR === 'MB1' ? MB1_HTML_PDF_RENDERER : HTML_2D_RENDERER,
-                        baseUrl: typeof MB1_MAP_BASE64 === 'string' && MB1_MAP_BASE64.startsWith('http') ? MB1_MAP_BASE64.substring(0, MB1_MAP_BASE64.indexOf('/', 8)) : 'http://localhost:8081'
-                    }}
+                      originWhitelist={['*']}
+                      source={{
+                          html: HTML_2D_RENDERER,
+                          baseUrl: 'http://localhost:8081'
+                      }}
                     style={{ flex: 1 }}
                     onLoadEnd={handleWebViewLoadEnd}
                     onMessage={handleWebViewMessage}
-                    javaScriptEnabled={true}
-                    domStorageEnabled={true}
-                    mixedContentMode="always"
+                      javaScriptEnabled={true}
+                      domStorageEnabled={true}
+                      mixedContentMode="always"
+                    allowFileAccess={true}
+                    allowUniversalAccessFromFileURLs={true}
                 />
-                
+                )}
+                  {/* <MB1NativeMap3D /> */}
                 {loadingModel && (
                     <View style={{
                         position: 'absolute',
@@ -1583,7 +1686,9 @@ const NavigationScreen = () => {
                         backgroundColor: 'rgba(255,255,255,0.8)'
                     }}>
                         <ActivityIndicator size="large" color="#E2231A" />
-                        <Text style={{ marginTop: 10, color: '#87848A' }}>Preparing 2D Map...</Text>
+                      <Text style={{ marginTop: 10, color: '#87848A' }}>
+                          {APP_FLAVOR === 'MB1' ? 'Loading 3D Map...' : 'Preparing 2D Map...'}
+                      </Text>
                     </View>
                 )}
 
@@ -1600,14 +1705,14 @@ const NavigationScreen = () => {
                 )}
 
                 {/* Zoom controls HUD overlay */}
-                <View style={styles.zoomHUD}>
+                {APP_FLAVOR !== 'MB1' && <View style={styles.zoomHUD}>
                     <TouchableOpacity style={styles.zoomButton} onPress={handleZoomIn}>
                         <Text style={styles.zoomText}>+</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.zoomButton} onPress={handleZoomOut}>
                         <Text style={styles.zoomText}>−</Text>
                     </TouchableOpacity>
-                </View>
+                </View>}
 
                 {/* HUD Floor level selector overlay */}
                 <View style={styles.floorSelectorContainer}>
