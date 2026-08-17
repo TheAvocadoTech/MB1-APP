@@ -69,22 +69,20 @@ export const MB1NativeMap3D = () => {
 
 
 const MB1FilamentMap = () => {
-  // const MB1_CAMPUS_GLB =
-  //   require('../../assets/Images/1stFloor.glb');
- const MB1_CAMPUS_GLB =
+  const MB1_CAMPUS_GLB =
     require('../../assets/models/mb1-campus.glb');
+//  const MB1_CAMPUS_GLB =
+//     require('../../assets/models/mb1-campus.glb');
   const [viewHeight, setViewHeight] = React.useState(1);
 
   const cameraManipulator = useCameraManipulator({
-   orbitHomePosition: [0, 100, 300],
-    targetPosition: [0, 0, 0],
-    upVector: [0, 1, 0],
+   orbitHomePosition: [0, 15, 45],
+  targetPosition: [0, 0, 0],
+  orbitSpeed: [0.003, 0.003],
+  upVector: [0, 1, 0],
+  zoomSpeed: [1.05],
 
-    // Rotation sensitivity
-    orbitSpeed: [0.003, 0.003],
-
-    // IMPORTANT: must be an array
-    zoomSpeed: [3.05],
+    
   });
 
 
@@ -204,8 +202,7 @@ const composedGesture =
   <GestureDetector gesture={composedGesture}>
   <View
     style={styles.gestureContainer}
-    onLayout={onLayout}
-  >
+    onLayout={onLayout}>
     <FilamentView style={styles.filamentView}>
 
       <DefaultLight />
@@ -217,7 +214,7 @@ const composedGesture =
       />
 
       <Model
-        source={MB1_CAMPUS_GLB}
+        source={MB1_CAMPUS_GLB} 
       />
 
     </FilamentView>
