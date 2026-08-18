@@ -11,7 +11,7 @@ import CenterContentModal from '../../../../components/Modal/CenterContentModal/
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useDispatch, useSelector } from 'react-redux';
-import AsyncStorage from '@react-native-community/async-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { clearCredentials, setCredentials } from '../../../../store/slices/authSlice';
 import { RootState, AppDispatch } from '../../../../store/store';
 import { regenerateQR, fetchVisitorDashboard, fetchCabinetsList, updateVisitorCabinet } from '../../../../services/ApiUtility';

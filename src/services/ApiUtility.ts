@@ -1,6 +1,6 @@
 import axios from 'axios';
 // import AsyncStorage from '@react-native-async-storage/async-AsyncStorage';
-import AsyncStorage from '@react-native-community/async-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { store } from '../store/store';
 
 import { APP_FLAVOR } from '../config/flavor';

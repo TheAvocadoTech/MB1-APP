@@ -4,7 +4,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Camera, useCameraDevice, useCameraPermission, useCodeScanner, CameraPermissionStatus } from 'react-native-vision-camera';
 import { useDispatch, useSelector } from 'react-redux';
-import AsyncStorage from '@react-native-community/async-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { default as Text } from '../../../../components/Text/MSText';
 import { ImageSource } from '../../../../constants/assets/images';

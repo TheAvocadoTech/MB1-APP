@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, ReactNode, useEffect } from
 import { Appearance, StatusBar, StatusBarStyle } from 'react-native';
 import { darkColors, lightColors } from '../constants/Ui/colors';
 import SystemNavigationBar from 'react-native-system-navigation-bar';
-import AsyncStorage from '@react-native-community/async-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const ThemeMode = {
     light: 'light',

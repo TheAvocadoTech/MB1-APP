@@ -4,20 +4,22 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { WebView } from 'react-native-webview';
-import { Camera, DefaultLight, FilamentScene, FilamentView, Model, useCameraManipulator } from 'react-native-filament';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../../../store/store';
 import { getVisitorLocation } from '../../../../store/slices/cabinetSlice';
 import { getNavigationRoute } from '../../../../services/ApiUtility';
 
+// import { default as Text } from '../../../../components/Text/MSText';
 import { default as Text } from '../../../../components/Text/MSText';
+
 import { ImageSource } from '../../../../constants/assets/images';
 import { MAP_BASE64_DATA } from '../../../../constants/assets/images/mapBase64Data';
 import { useTheme } from '../../../../theme/ThemeProvider';
 import { useStyles } from './NavigationScreen.styles';
 import { APP_FLAVOR } from '../../../../config/flavor';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { MB1NativeMap3D } from '../../../../components/Map/MB1NativeMap3D';
+// import { MB1NativeMap3D } from '../../../../components/Map/MB1NativeMap3D';
+import { MB1Native3DMap } from '../../../../components/Map/MB1Native3DMap';
 
 // Retained temporarily as the former WebView implementation while MB1 uses
 // the native Filament renderer below.
@@ -1650,10 +1652,9 @@ const NavigationScreen = () => {
             {/* Main datacenter map canvas */}
             <View style={styles.mapContainer}>
                 {APP_FLAVOR === 'MB1' ? (
-                    // <FilamentScene>
-                    //     <MB1NativeMap3D />
-                    // </FilamentScene>
-                     <MB1NativeMap3D />
+                  
+                    //  <MB1NativeMap3D />
+                 <MB1Native3DMap/>
                    
                 ) : (
                 <WebViewComponent

@@ -7,8 +7,7 @@ import { ImageSource } from '../../../../constants/assets/images';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useDispatch } from 'react-redux';
-import AsyncStorage from '@react-native-community/async-storage';
-
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setCredentials, clearCredentials } from '../../../../store/slices/authSlice';
 import { fetchVisitorDashboard } from '../../../../services/ApiUtility';
 

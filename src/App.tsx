@@ -11,6 +11,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StyleSheet } from 'react-native';
 import { Provider } from 'react-redux';
 import { store } from './store/store';
+import { StackScreen } from 'react-native-screens'
 
 const Stack = createNativeStackNavigator();
 const initialRoute = "splash"
@@ -22,8 +23,7 @@ const App = () => {
                 <NavigationContainer>
                     <Stack.Navigator
                         screenOptions={{ headerShown: false }}
-                        initialRouteName={initialRoute}
-                    >
+                        initialRouteName={initialRoute}>
                         <Stack.Screen name="splash" component={SplashScreen} />
                         <Stack.Screen name="dashboard" component={DashboardScreen}/>
                         <Stack.Screen name="scanQr" component={ScanQr} />

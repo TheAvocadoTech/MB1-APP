@@ -1,241 +1,346 @@
-import React from 'react';
-import { View, StyleSheet, LayoutChangeEvent, Dimensions } from 'react-native';
+// import React from 'react';
 
-import {
-  Camera,
-  DefaultLight,
-  FilamentScene,
-  FilamentView,
-  Model,
-  useCameraManipulator,
-} from 'react-native-filament';
+// import defaultReaders from '../../config/rfidReaders.json';
 
-import {
-  Gesture,
-  GestureDetector,
-} from 'react-native-gesture-handler';
-import { useSharedValue } from 'react-native-worklets-core';
+// import {
+//   View,
+//   StyleSheet,
+//   LayoutChangeEvent,
+// } from 'react-native';
+
+// import {
+//   Camera,
+//   DefaultLight,
+//   FilamentScene,
+//   FilamentView,
+//   Model,
+//   useCameraManipulator,
+// } from 'react-native-filament';
+
+// import {
+//   Gesture,
+//   GestureDetector,
+// } from 'react-native-gesture-handler';
+
+// import {
+//   RFIDPathLayer,
+// } from './RFIDPathLayer';
 
 
-export const MB1NativeMap3D = () => {
-  return (
-    <FilamentScene>
-      <MB1FilamentMap />
-      {/* <Scene/> */}
-    </FilamentScene>
-  );
-};
-// function Scene() {
-//       const MB1_CAMPUS_GLB =require('../../assets/Images/GRFloor.glb');
-// const cameraManipulator = useCameraManipulator({
-//         orbitHomePosition: [0, 0, 8],
-//         targetPosition: [0, 0, 0],
-//         orbitSpeed: [0.003, 0.0031]
-//     });
-//     const viewHeight = Dimensions. get('window').height;
-//     const panGesture = Gesture. Pan()
-//     .onBegin( (event) =>{
-//         const yCorrected = viewHeight - event. translationY;
-//         cameraManipulator?.grabBegin(event.translationX, yCorrected,false);  
-//     }).onUpdate((event)=>{
-//         const yCorrected = viewHeight - event. translationY;
-//         cameraManipulator?.grabUpdate(event.translationX, yCorrected);
-//     })
-//     .maxPointers(1)
-//     .onEnd (() => {
-//         cameraManipulator?.grabEnd();
-//     });
-//     const previousScale = useSharedValue(1) ;
-//     const scaleMultiplier = 100;
-//     const pinchGesture = Gesture. Pinch()
-//     .onBegin(({ scale }) => {
-//         previousScale.value = scale;
-//     }).onUpdate(({scale,focalX,focalY})=>{
-//         const delta = scale - previousScale. value;
-//         cameraManipulator?.scroll(focalX, focalY, -delta * scaleMultiplier);
-//         previousScale.value = scale;
-//     })
-//     const combinedGesture = Gesture. Race (pinchGesture, panGesture);
-//     return(
-//       <GestureDetector gesture={ combinedGesture}>
-//         <FilamentView style={styles.filamentView}>
-//            <Camera cameraManipulator={cameraManipulator} />
-//            <DefaultLight />
-//            <Model source={MB1_CAMPUS_GLB} />
-//         </FilamentView>
-//       </GestureDetector>
+// export const MB1NativeMap3D = () => {
+//   return (
+//     <FilamentScene>
+//       <MB1FilamentMap />
+//     </FilamentScene>
+//   );
+// };
+
+// const MB1FilamentMap = () => {
+//      const orderedReaders = React.useMemo(() => {
+//     return [...defaultReaders].sort(
+//       (a, b) => a.sequence - b.sequence,
 //     );
-// }
-
-
-const MB1FilamentMap = () => {
-  const MB1_CAMPUS_GLB =
-    require('../../assets/models/mb1-campus.glb');
-//  const MB1_CAMPUS_GLB =
+//   }, []);
+//   const MB1_CAMPUS_GLB =
 //     require('../../assets/models/mb1-campus.glb');
-  const [viewHeight, setViewHeight] = React.useState(1);
 
-  const cameraManipulator = useCameraManipulator({
-   orbitHomePosition: [0, 15, 45],
-  targetPosition: [0, 0, 0],
-  orbitSpeed: [0.003, 0.003],
-  upVector: [0, 1, 0],
-  zoomSpeed: [1.05],
+//   const [viewHeight, setViewHeight] = React.useState(1);
 
-    
-  });
+//   const cameraManipulator = useCameraManipulator({
+//     orbitHomePosition: [0, 30, 90],
 
+//     targetPosition: [0, 20, 0],
 
-  const onLayout = (event: LayoutChangeEvent) => {
-    const height = event.nativeEvent.layout.height;
+//     orbitSpeed: [0.003, 0.003],
 
-    if (height > 0) {
-      setViewHeight(height);
-    }
-  };
+//     upVector: [0, 1, 0],
 
+//     zoomSpeed: [1.05],
+//   });
 
-  /*
-   * ONE FINGER
-   *
-   * Drag finger = orbit/rotate camera
-   */
- const panGesture = Gesture.Pan()
-  .minPointers(1)
-  .maxPointers(1)
-  .runOnJS(true)
-  .onBegin((event) => {
-    console.log('PAN BEGIN', event.x, event.y);
+//   const onLayout = (
+//     event: LayoutChangeEvent,
+//   ) => {
+//     const height =
+//       event.nativeEvent.layout.height;
 
-    const y = viewHeight - event.y;
+//     if (height > 0) {
+//       setViewHeight(height);
+//     }
+//   };
 
-    cameraManipulator?.grabBegin(
-      event.x,
-      y,
-      false
-    );
-  })
-  .onUpdate((event) => {
-    const y = viewHeight - event.y;
+//   const panGesture = Gesture.Pan()
+//     .minPointers(1)
+//     .maxPointers(1)
+//     .runOnJS(true)
 
-    cameraManipulator?.grabUpdate(
-      event.x,
-      y
-    );
-  })
-  .onEnd(() => {
-    console.log('PAN END');
-    cameraManipulator?.grabEnd();
-  })
-  .onFinalize(() => {
-    cameraManipulator?.grabEnd();
-  });
+//     .onBegin((event) => {
+//       if (!cameraManipulator) {
+//         return;
+//       }
 
+//       const y =
+//         viewHeight - event.y;
 
-const pinchGesture = Gesture.Pinch()
-  .runOnJS(true)
+//       cameraManipulator.grabBegin(
+//         event.x,
+//         y,
+//         false,
+//       );
+//     })
 
-  .onBegin((event) => {
-    console.log(
-      '========== PINCH BEGIN ==========',
-      event.scale
-    );
-  })
+//     .onUpdate((event) => {
+//       if (!cameraManipulator) {
+//         return;
+//       }
 
-  .onStart((event) => {
-    console.log(
-      '========== PINCH START ==========',
-      event.scale
-    );
-  })
+//       const y =
+//         viewHeight - event.y;
 
-  .onUpdate((event) => {
-    console.log(
-      'PINCH:',
-      'scale =',
-      event.scale,
-      'focalX =',
-      event.focalX,
-      'focalY =',
-      event.focalY
-    );
+//       cameraManipulator.grabUpdate(
+//         event.x,
+//         y,
+//       );
+//     })
 
-    if (!cameraManipulator) {
-      console.log('NO CAMERA MANIPULATOR');
-      return;
-    }
+//     .onEnd(() => {
+//       if (!cameraManipulator) {
+//         return;
+//       }
 
-    const y =
-      viewHeight - event.focalY;
+//       cameraManipulator.grabEnd();
+//     })
 
-    /*
-     * Use incremental scale instead of
-     * absolute event.scale.
-     */
-    const delta =
-      (1 - event.scale) * 5;
+//     .onFinalize(() => {
+//       if (!cameraManipulator) {
+//         return;
+//       }
 
-    cameraManipulator.scroll(
-      event.focalX,
-      y,
-      delta
-    );
-  })
+//       cameraManipulator.grabEnd();
+//     });
 
-  .onEnd(() => {
-    console.log('PINCH END');
-  })
+//   return (
+//     <GestureDetector gesture={panGesture}>
+//       <View
+//         style={styles.gestureContainer}
+//         onLayout={onLayout}
+//       >
+//         <FilamentView
+//           style={styles.filamentView}
+//         >
+//           <DefaultLight />
 
-  .onFinalize(() => {
-    console.log('PINCH FINALIZE');
-  });
+//           <Camera
+//             cameraManipulator={
+//               cameraManipulator
+//             }
+//             near={0.1}
+//             far={100000}
+//           />
 
+//           <Model
+//             source={MB1_CAMPUS_GLB}
+//           />
+         
+         
+          
 
-const composedGesture =
-  Gesture.Simultaneous(
-    panGesture,
-    pinchGesture
-  );
+//         </FilamentView>
+//          <RFIDPathLayer
+//         readers={orderedReaders}
 
+//         scale={1}
 
-  return (
-  <GestureDetector gesture={composedGesture}>
-  <View
-    style={styles.gestureContainer}
-    onLayout={onLayout}>
-    <FilamentView style={styles.filamentView}>
+//         offsetX={0}
 
-      <DefaultLight />
+//         offsetY={0}
+//       />
 
-      <Camera
-        cameraManipulator={cameraManipulator}
-        near={0.1}
-        far={100000}
-      />
+//       </View>
+//     </GestureDetector>
+//   );
+// };
+// // const MB1FilamentMap = () => {
 
-      <Model
-        source={MB1_CAMPUS_GLB} 
-      />
+// //   const orderedReaders = React.useMemo(() => {
+// //     return [...defaultReaders].sort(
+// //       (a, b) => a.sequence - b.sequence,
+// //     );
+// //   }, []);
 
-    </FilamentView>
-  </View>
-</GestureDetector>
-  );
-};
+// //   const MB1_CAMPUS_GLB =
+// //     require('../../assets/models/mb1-campus.glb');
+
+// //   const [viewHeight, setViewHeight] =
+// //     React.useState(1);
 
 
-const styles = StyleSheet.create({
+// //   /*
+// //    * CAMERA
+// //    */
+// //   const cameraManipulator =
+// //     useCameraManipulator({
 
-  gestureContainer: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
-  },
+// //       orbitHomePosition: [
+// //         0,
+// //         30,
+// //         90,
+// //       ],
 
-  filamentView: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
-  },
+// //       targetPosition: [
+// //         0,
+// //         20,
+// //         0,
+// //       ],
 
-});
+// //       orbitSpeed: [
+// //         0.003,
+// //         0.003,
+// //       ],
+
+// //       upVector: [
+// //         0,
+// //         1,
+// //         0,
+// //       ],
+
+// //       zoomSpeed: [
+// //         1.05,
+// //       ],
+// //     });
+
+
+// //   /*
+// //    * VIEW HEIGHT
+// //    */
+// //   const onLayout = (
+// //     event: LayoutChangeEvent,
+// //   ) => {
+
+// //     const height =
+// //       event.nativeEvent.layout.height;
+
+// //     if (height > 0) {
+// //       setViewHeight(height);
+// //     }
+// //   };
+
+
+// //   /*
+// //    * ONE FINGER DRAG
+// //    */
+// //   const panGesture = Gesture.Pan()
+
+// //     .minPointers(1)
+
+// //     .maxPointers(1)
+
+// //     .runOnJS(true)
+
+// //     .onBegin((event) => {
+
+// //       if (!cameraManipulator) {
+// //         return;
+// //       }
+
+// //       const y =
+// //         viewHeight - event.y;
+
+// //       cameraManipulator.grabBegin(
+// //         event.x,
+// //         y,
+// //         false,
+// //       );
+// //     })
+
+// //     .onUpdate((event) => {
+
+// //       if (!cameraManipulator) {
+// //         return;
+// //       }
+
+// //       const y =
+// //         viewHeight - event.y;
+
+// //       cameraManipulator.grabUpdate(
+// //         event.x,
+// //         y,
+// //       );
+// //     })
+
+// //     .onEnd(() => {
+
+// //       if (!cameraManipulator) {
+// //         return;
+// //       }
+
+// //       cameraManipulator.grabEnd();
+// //     });
+
+  
+// //   return (
+// //     <GestureDetector
+// //       gesture={panGesture}
+// //     >
+
+// //       <View
+// //         style={styles.gestureContainer}
+// //         onLayout={onLayout}
+// //       >
+
+// //         <FilamentView
+// //           style={styles.filamentView}
+// //         >
+
+// //           <DefaultLight />
+
+// //           <Camera
+// //             cameraManipulator={
+// //               cameraManipulator
+// //             }
+// //             near={0.1}
+// //             far={100000}
+// //           />
+
+// //           {/* YOUR EXISTING CAMPUS MODEL */}
+// //           <Model
+// //             source={MB1_CAMPUS_GLB}
+// //           />
+
+// //           {/* RFID PATH */}
+// //           <RFIDPathLayer
+// //             readers={orderedReaders}
+// //             markerSize={1}
+// //             markerHeight={1}
+// //             pathHeight={0.15}
+// //             pathThickness={0.12}
+// //           />
+
+// //         </FilamentView>
+
+// //       </View>
+
+// //     </GestureDetector>
+// //   );
+// // };
+
+
+// const styles = StyleSheet.create({
+//   container: {
+//     flex: 1,
+//   },
+
+  
+//   gestureContainer: {
+//     flex: 1,
+//     width: '100%',
+//     height: '100%',
+//   },
+
+//   filamentView: {
+//     flex: 1,
+//     width: '100%',
+//     height: '100%',
+//   },
+
+// });
