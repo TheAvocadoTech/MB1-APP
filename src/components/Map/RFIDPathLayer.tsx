@@ -1,347 +1,347 @@
-import React from 'react';
-import {
-  View,
-  StyleSheet,
-  LayoutChangeEvent,
-} from 'react-native';
+// import React from 'react';
+// import {
+//   View,
+//   StyleSheet,
+//   LayoutChangeEvent,
+// } from 'react-native';
 
-import Svg, {
-  Polyline,
-  Circle,
-} from 'react-native-svg';
+// // import Svg, {
+// //   Polyline,
+// //   Circle,
+// // } from 'react-native-svg';
 
 
-export type RFIDReader = {
-  sequence: number;
-  id: number;
-  location: string;
+// export type RFIDReader = {
+//   sequence: number;
+//   id: number;
+//   location: string;
 
-  coords: {
-    x: number;
-    y: number;
-  };
+//   coords: {
+//     x: number;
+//     y: number;
+//   };
 
-  ip?: string;
-  sr?: string;
-  ser?: string;
-  port?: number;
-  isWaypoint?: boolean;
-};
+//   ip?: string;
+//   sr?: string;
+//   ser?: string;
+//   port?: number;
+//   isWaypoint?: boolean;
+// };
 
 
-type RFIDPathLayerProps = {
-  readers: RFIDReader[];
+// type RFIDPathLayerProps = {
+//   readers: RFIDReader[];
 
-  /*
-   * Converts your RFID coordinate system
-   * into screen/SVG coordinates.
-   */
-  scale?: number;
+//   /*
+//    * Converts your RFID coordinate system
+//    * into screen/SVG coordinates.
+//    */
+//   scale?: number;
 
-  offsetX?: number;
-  offsetY?: number;
+//   offsetX?: number;
+//   offsetY?: number;
 
-  /*
-   * Full path
-   */
-  showFullPath?: boolean;
+//   /*
+//    * Full path
+//    */
+//   showFullPath?: boolean;
 
-  fullPathColor?: string;
-  fullPathWidth?: number;
+//   fullPathColor?: string;
+//   fullPathWidth?: number;
 
-  /*
-   * Active/highlighted path
-   */
-  showActivePath?: boolean;
+//   /*
+//    * Active/highlighted path
+//    */
+//   showActivePath?: boolean;
 
-  activePathColor?: string;
-  activePathWidth?: number;
+//   activePathColor?: string;
+//   activePathWidth?: number;
 
-  /*
-   * Reader markers
-   */
-  markerRadius?: number;
-};
+//   /*
+//    * Reader markers
+//    */
+//   markerRadius?: number;
+// };
 
 
-export const RFIDPathLayer = ({
-  readers,
+// export const RFIDPathLayer = ({
+//   readers,
 
-  scale = 1,
+//   scale = 1,
 
-  offsetX = 0,
-  offsetY = 0,
+//   offsetX = 0,
+//   offsetY = 0,
 
-  showFullPath = true,
+//   showFullPath = true,
 
-  fullPathColor = '#9ca3af',
-  fullPathWidth = 3,
+//   fullPathColor = '#9ca3af',
+//   fullPathWidth = 3,
 
-  showActivePath = true,
+//   showActivePath = true,
 
-  activePathColor = '#0ea5e9',
-  activePathWidth = 6,
+//   activePathColor = '#0ea5e9',
+//   activePathWidth = 6,
 
-  markerRadius = 7,
+//   markerRadius = 7,
 
-}: RFIDPathLayerProps) => {
+// }: RFIDPathLayerProps) => {
 
-  const [viewWidth, setViewWidth] = React.useState(1);
-  const [viewHeight, setViewHeight] = React.useState(1);
+//   const [viewWidth, setViewWidth] = React.useState(1);
+//   const [viewHeight, setViewHeight] = React.useState(1);
 
 
-  /*
-   * Same logic as your web version:
-   *
-   * allReaders
-   *   ↓
-   * sequence sort
-   */
+//   /*
+//    * Same logic as your web version:
+//    *
+//    * allReaders
+//    *   ↓
+//    * sequence sort
+//    */
 
-  const orderedReaders = React.useMemo(() => {
-
-    return [...readers]
-      .filter(
-        reader =>
-          reader.coords &&
-          Number.isFinite(reader.coords.x) &&
-          Number.isFinite(reader.coords.y),
-      )
-      .sort(
-        (a, b) =>
-          a.sequence - b.sequence,
-      );
-
-  }, [readers]);
+//   const orderedReaders = React.useMemo(() => {
+
+//     return [...readers]
+//       .filter(
+//         reader =>
+//           reader.coords &&
+//           Number.isFinite(reader.coords.x) &&
+//           Number.isFinite(reader.coords.y),
+//       )
+//       .sort(
+//         (a, b) =>
+//           a.sequence - b.sequence,
+//       );
+
+//   }, [readers]);
 
 
-  /*
-   * Convert RFID coordinates
-   * into SVG coordinates.
-   */
+//   /*
+//    * Convert RFID coordinates
+//    * into SVG coordinates.
+//    */
 
-  const points = React.useMemo(() => {
+//   const points = React.useMemo(() => {
 
-  return orderedReaders.map(reader => {
+//   return orderedReaders.map(reader => {
 
-    const x =
-      (reader.coords.x / 100) *
-      viewWidth;
+//     const x =
+//       (reader.coords.x / 100) *
+//       viewWidth;
 
-    const y =
-      (reader.coords.y / 100) *
-      viewHeight;
+//     const y =
+//       (reader.coords.y / 100) *
+//       viewHeight;
 
-    return {
-      x,
-      y,
-    };
+//     return {
+//       x,
+//       y,
+//     };
 
-  });
+//   });
 
-}, [
-  orderedReaders,
-  viewWidth,
-  viewHeight,
-]);
+// }, [
+//   orderedReaders,
+//   viewWidth,
+//   viewHeight,
+// ]);
 
-  /*
-   * SVG Polyline format:
-   *
-   * "x1,y1 x2,y2 x3,y3"
-   */
+//   /*
+//    * SVG Polyline format:
+//    *
+//    * "x1,y1 x2,y2 x3,y3"
+//    */
 
-  const polylinePoints = React.useMemo(() => {
+//   const polylinePoints = React.useMemo(() => {
 
-    return points
-      .map(
-        point =>
-          `${point.x},${point.y}`,
-      )
-      .join(' ');
+//     return points
+//       .map(
+//         point =>
+//           `${point.x},${point.y}`,
+//       )
+//       .join(' ');
 
-  }, [points]);
+//   }, [points]);
 
 
-  /*
-   * Layout
-   */
+//   /*
+//    * Layout
+//    */
 
-  const onLayout = (
-    event: LayoutChangeEvent,
-  ) => {
+//   const onLayout = (
+//     event: LayoutChangeEvent,
+//   ) => {
 
-    const {
-      width,
-      height,
-    } = event.nativeEvent.layout;
+//     const {
+//       width,
+//       height,
+//     } = event.nativeEvent.layout;
 
-    if (width > 0) {
-      setViewWidth(width);
-    }
+//     if (width > 0) {
+//       setViewWidth(width);
+//     }
 
-    if (height > 0) {
-      setViewHeight(height);
-    }
-  };
+//     if (height > 0) {
+//       setViewHeight(height);
+//     }
+//   };
 
 
-  return (
+//   return (
 
-    <View
-      pointerEvents="none"
-      style={StyleSheet.absoluteFill}
-      onLayout={onLayout}
-    >
+//     <View
+//       pointerEvents="none"
+//       style={StyleSheet.absoluteFill}
+//       onLayout={onLayout}
+//     >
 
-      <Svg
-        width={viewWidth}
-        height={viewHeight}
-        viewBox={`0 0 ${viewWidth} ${viewHeight}`}
-      >
+//       <Svg
+//         width={viewWidth}
+//         height={viewHeight}
+//         viewBox={`0 0 ${viewWidth} ${viewHeight}`}
+//       >
 
-        {/* =================================================
-            1. FULL RFID PATH
-            Same idea as:
-            <Line color="#9ca3af" />
-           ================================================= */}
+//         {/* =================================================
+//             1. FULL RFID PATH
+//             Same idea as:
+//             <Line color="#9ca3af" />
+//            ================================================= */}
 
-        {showFullPath &&
-          points.length > 1 && (
+//         {showFullPath &&
+//           points.length > 1 && (
 
-            <Polyline
-              points={polylinePoints}
+//             <Polyline
+//               points={polylinePoints}
 
-              fill="none"
+//               fill="none"
 
-              stroke={fullPathColor}
+//               stroke={fullPathColor}
 
-              strokeWidth={fullPathWidth}
+//               strokeWidth={fullPathWidth}
 
-              strokeLinecap="round"
+//               strokeLinecap="round"
 
-              strokeLinejoin="round"
+//               strokeLinejoin="round"
 
-              opacity={0.45}
-            />
+//               opacity={0.45}
+//             />
 
-          )}
+//           )}
 
 
-        {/* =================================================
-            2. HIGHLIGHTED PATH
-            Same idea as your cyan active path.
+//         {/* =================================================
+//             2. HIGHLIGHTED PATH
+//             Same idea as your cyan active path.
             
-            We draw a wide transparent line first,
-            then a narrower core line.
-           ================================================= */}
+//             We draw a wide transparent line first,
+//             then a narrower core line.
+//            ================================================= */}
 
-        {showActivePath &&
-          points.length > 1 && (
-            <>
+//         {showActivePath &&
+//           points.length > 1 && (
+//             <>
 
-              {/* Outer glow */}
+//               {/* Outer glow */}
 
-              <Polyline
-                points={polylinePoints}
+//               <Polyline
+//                 points={polylinePoints}
 
-                fill="none"
+//                 fill="none"
 
-                stroke={activePathColor}
+//                 stroke={activePathColor}
 
-                strokeWidth={
-                  activePathWidth * 2.5
-                }
+//                 strokeWidth={
+//                   activePathWidth * 2.5
+//                 }
 
-                strokeLinecap="round"
+//                 strokeLinecap="round"
 
-                strokeLinejoin="round"
+//                 strokeLinejoin="round"
 
-                opacity={0.25}
-              />
+//                 opacity={0.25}
+//               />
 
 
-              {/* Core */}
+//               {/* Core */}
 
-              <Polyline
-                points={polylinePoints}
+//               <Polyline
+//                 points={polylinePoints}
 
-                fill="none"
+//                 fill="none"
                 
-                stroke={activePathColor}
+//                 stroke={activePathColor}
 
-                strokeWidth={
-                  activePathWidth
-                }
+//                 strokeWidth={
+//                   activePathWidth
+//                 }
 
-                strokeLinecap="round"
+//                 strokeLinecap="round"
 
-                strokeLinejoin="round"
+//                 strokeLinejoin="round"
 
-                opacity={1}
-              />
+//                 opacity={1}
+//               />
 
-            </>
-          )}
-
-
-        {/* =================================================
-            3. RFID READER MARKERS
-           ================================================= */}
-
-        {points.map(
-          (point, index) => {
-
-            const reader =
-              orderedReaders[index];
-
-            return (
-
-              <React.Fragment
-                key={`rfid-${reader.id}`}
-              >
-
-                {/* Outer halo */}
-
-                <Circle
-                  cx={point.x}
-                  cy={point.y}
-
-                  r={
-                    markerRadius * 1.8
-                  }
-
-                  fill="#0ea5e9"
-
-                  opacity={0.2}
-                />
+//             </>
+//           )}
 
 
-                {/* Reader */}
+//         {/* =================================================
+//             3. RFID READER MARKERS
+//            ================================================= */}
 
-                <Circle
-                  cx={point.x}
-                  cy={point.y}
+//         {points.map(
+//           (point, index) => {
 
-                  r={markerRadius}
+//             const reader =
+//               orderedReaders[index];
 
-                  fill="#0ea5e9"
+//             return (
 
-                  stroke="#ffffff"
+//               <React.Fragment
+//                 key={`rfid-${reader.id}`}
+//               >
 
-                  strokeWidth={2}
-                />
+//                 {/* Outer halo */}
 
-              </React.Fragment>
+//                 <Circle
+//                   cx={point.x}
+//                   cy={point.y}
 
-            );
+//                   r={
+//                     markerRadius * 1.8
+//                   }
 
-          },
-        )}
+//                   fill="#0ea5e9"
 
-      </Svg>
+//                   opacity={0.2}
+//                 />
 
-    </View>
 
-  );
-};
+//                 {/* Reader */}
+
+//                 <Circle
+//                   cx={point.x}
+//                   cy={point.y}
+
+//                   r={markerRadius}
+
+//                   fill="#0ea5e9"
+
+//                   stroke="#ffffff"
+
+//                   strokeWidth={2}
+//                 />
+
+//               </React.Fragment>
+
+//             );
+
+//           },
+//         )}
+
+//       </Svg>
+
+//     </View>
+
+//   );
+// };

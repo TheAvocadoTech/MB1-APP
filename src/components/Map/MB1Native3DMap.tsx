@@ -24,12 +24,12 @@ export const MB1Native3DMap = () => {
           up: [0, 1, 0],
         }}
       >
-        <ambientLight intensity={0.8} />
+        {/* <ambientLight intensity={0.8} />
 
         <directionalLight
           position={[10, 20, 10]}
           intensity={1.5}
-        />
+        /> */}
 
         <Suspense fallback={null}>
           <MB1R3FMap url={resolvedAsset?.uri} />
@@ -131,10 +131,10 @@ const MB1R3FMap = ({ url }: MB1R3FMapProps) => {
 
   return (
     <GestureDetector gesture={panGesture}>
-      <primitive
+      {/* <primitive
         object={scene}
         scale={1}
-      />
+      /> */}
     </GestureDetector>
   );
 };
