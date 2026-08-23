@@ -5,21 +5,36 @@ import defaultReaders from '../../config/rfidReaders.json';
 const FLOOR_WIDTH = 40;
 const FLOOR_DEPTH = 28;
 
+// Keeps your correct reader-to-reader distance scaling
+const SCALE_X = 1.0;
+const SCALE_Z = 1.0;
+
+// Re-anchored origins to translate the start point directly onto the marked red spot
+const BASE_SCALE = 0.55;
+const BASE_ORIGIN_X = -6.3; // Decreased from -8.8 to slide path LEFT into the room
+const BASE_ORIGIN_Z = -3.7;   // Increased from -4.3 to slide path DOWN into the hallway
+
+// Average percentage center of your map path coordinates
+const CENTER_X_PCT = 50; 
+const CENTER_Y_PCT = 50; 
+
+// Automatically re-anchor origin without altering relative spacing
+const ORIGIN_X = BASE_ORIGIN_X - (CENTER_X_PCT / 100) * FLOOR_WIDTH * (SCALE_X - BASE_SCALE);
+const ORIGIN_Z = BASE_ORIGIN_Z - (CENTER_Y_PCT / 100) * FLOOR_DEPTH * (SCALE_Z - BASE_SCALE);
+
 /**
- * Exact port of Web pctToWorld logic:
- * Maps percentage coords (0-100) to 3D scene units with origin at center [0,0,0]
+ * Maps percentage coords accurately onto the 3D floor plan
  */
 export const pctToWorld = (xPct: number, yPct: number, height = 0.15): [number, number, number] => {
-  return [
-    (xPct / 100) * FLOOR_WIDTH - FLOOR_WIDTH / 2,
-    height,
-    (yPct / 100) * FLOOR_DEPTH - FLOOR_DEPTH / 2,
-  ];
+  const worldX = (xPct / 100) * (FLOOR_WIDTH * SCALE_X) + ORIGIN_X;
+  const worldZ = (yPct / 100) * (FLOOR_DEPTH * SCALE_Z) + ORIGIN_Z;
+
+  return [worldX, height, worldZ];
 };
 
 export const angleBetween = (a: { x: number; y: number }, b: { x: number; y: number }) => {
-  const dx = ((b.x - a.x) / 100) * FLOOR_WIDTH;
-  const dz = ((b.y - a.y) / 100) * FLOOR_DEPTH;
+  const dx = ((b.x - a.x) / 100) * FLOOR_WIDTH * (SCALE_X / 0.55);
+  const dz = ((b.y - a.y) / 100) * FLOOR_DEPTH * (SCALE_Z / 0.55);
   return Math.atan2(dx, dz);
 };
 
@@ -43,8 +58,8 @@ export const isTurnPoint = (readers: any[], i: number, threshold = 25) => {
 };
 
 export function FlatPathLayer({ liveData }: { liveData?: any }) {
-  const apiReaders    = liveData?.allReaders?.length ? liveData.allReaders : defaultReaders;
-  const currentReader = liveData?.currentReader || defaultReaders[0];
+  const apiReaders    = liveData?.data?.allReaders?.length ? liveData.data.allReaders : defaultReaders;
+  const currentReader = liveData?.data?.currentReader || defaultReaders[0];
   const currentSeq    = currentReader.sequence || 1;
 
   const allReaders = useMemo(() => {
@@ -69,13 +84,14 @@ export function FlatPathLayer({ liveData }: { liveData?: any }) {
   return (
     <group renderOrder={999}>
       {/* ── 1. Full ghost path line (dim gray) ── */}
+      {/* ── 1. Full ghost path line (dim gray) ── */}
       {allPoints3D.length > 1 && (
         <Line
           points={allPoints3D}
           color="#9ca3af"
           opacity={0.4}
           transparent
-          lineWidth={2.5}
+          lineWidth={1.2} // Reduced from 2.5
           depthTest={false}
           depthWrite={false}
         />
@@ -84,19 +100,21 @@ export function FlatPathLayer({ liveData }: { liveData?: any }) {
       {/* ── 2. Active remaining path line (glowing cyan) ── */}
       {remainingPoints3D.length > 1 && (
         <>
-          <Line
+          {/* Outer glow line */}
+          {/* <Line
             points={remainingPoints3D}
             color="#0ea5e9"
             opacity={0.3}
             transparent
-            lineWidth={7}
+            lineWidth={3.5} // Reduced from 7
             depthTest={false}
             depthWrite={false}
-          />
+          /> */}
+          {/* Inner core line */}
           <Line
             points={remainingPoints3D}
             color="#0ea5e9"
-            lineWidth={2.5}
+            lineWidth={1.2} // Reduced from 2.5
             depthTest={false}
             depthWrite={false}
           />
@@ -114,11 +132,11 @@ export function FlatPathLayer({ liveData }: { liveData?: any }) {
         return (
           <group key={r.id} position={[wx, wy, wz]} rotation={[-Math.PI / 2, 0, 0]}>
             <mesh>
-              <circleGeometry args={[0.8, 32]} />
+              <circleGeometry args={[0.5, 32]} />
               <meshBasicMaterial color="#84cc16" opacity={0.22} transparent depthTest={false} depthWrite={false} />
             </mesh>
             <mesh>
-              <ringGeometry args={[0.4, 0.48, 32]} />
+              <ringGeometry args={[0.25, 0.32, 32]} />
               <meshBasicMaterial color="#84cc16" depthTest={false} depthWrite={false} />
             </mesh>
           </group>

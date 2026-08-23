@@ -56,7 +56,6 @@ const AllReadersMarkers = ({
     return allReaders
       .filter((reader) => reader?.coords && Number.isFinite(reader.coords.x) && Number.isFinite(reader.coords.y))
       .filter((reader) => {
-        // Skip the next target reader so it can be rendered as the pulsing ring instead
         if (!nextCoords) return true;
         return !(Math.abs(reader.coords.x - nextCoords.x) < 0.001 && Math.abs(reader.coords.y - nextCoords.y) < 0.001);
       })
@@ -70,7 +69,8 @@ const AllReadersMarkers = ({
     <group>
       {markers.map((m) => (
         <mesh key={m.key} position={m.position} rotation={[-Math.PI / 2, 0, 0]}>
-          <circleGeometry args={[0.5, 32]} />
+          {/* Reduced radius from 0.5 to 0.25 */}
+          <circleGeometry args={[0.25, 32]} />
           <meshBasicMaterial color="#64748b" transparent opacity={0.5} side={DoubleSide} />
         </mesh>
       ))}
@@ -97,7 +97,8 @@ const NextLocationRing = ({ coords }: { coords?: { x: number; y: number } | null
     const cycle = (time * 2) % 1; // 0.5s pulse loop
 
     if (meshRef.current) {
-      const scale = 0.8 + cycle * 1.2;
+      // Reduced max pulse scale expansion (0.6 -> 1.1 instead of 0.8 -> 2.0)
+      const scale = 0.6 + cycle * 0.5;
       meshRef.current.scale.set(scale, scale, 1);
     }
     if (materialRef.current) {
@@ -109,15 +110,15 @@ const NextLocationRing = ({ coords }: { coords?: { x: number; y: number } | null
 
   return (
     <group position={positionTuple} rotation={[-Math.PI / 2, 0, 0]}>
-      {/* Outer Lime Pulsing Ring */}
+      {/* Outer Lime Pulsing Ring (Reduced radius args from [0.8, 1.1] to [0.4, 0.55]) */}
       <mesh ref={meshRef}>
-        <ringGeometry args={[0.8, 1.1, 32]} />
+        <ringGeometry args={[0.4, 0.55, 32]} />
         <meshBasicMaterial ref={materialRef} color="#84cc16" transparent side={DoubleSide} />
       </mesh>
 
-      {/* Inner Solid Core */}
+      {/* Inner Solid Core (Reduced radius args from 0.7 to 0.35) */}
       <mesh>
-        <circleGeometry args={[0.7, 32]} />
+        <circleGeometry args={[0.35, 32]} />
         <meshBasicMaterial color="#84cc16" transparent opacity={0.8} side={DoubleSide} />
       </mesh>
     </group>
@@ -237,67 +238,72 @@ function NavigationCameraController({
 }: {
   currentCoords: any;
   nextCoords: any;
-  isManualCamera: any;
-  setIsManualCamera: any;
+  isManualCamera: boolean;
+  setIsManualCamera: (val: boolean) => void;
   recenterTrigger: any;
 }) {
   const { camera } = useThree();
   const controlsRef = useRef<any>(null);
   const targetVec = useRef(new Vector3());
   const camVec = useRef(new Vector3());
+  const isDragging = useRef(false);
+  const hasInitialized = useRef(false);
 
-  // Listen for touch gesture drags on OrbitControls
   useEffect(() => {
     const controls = controlsRef.current;
     if (!controls) return;
 
     const handleStart = () => {
+      isDragging.current = true;
       setIsManualCamera(true);
+    };
+    const handleEnd = () => {
+      isDragging.current = false;
     };
 
     controls.addEventListener('start', handleStart);
+    controls.addEventListener('end', handleEnd);
     return () => {
       controls.removeEventListener('start', handleStart);
+      controls.removeEventListener('end', handleEnd);
     };
   }, [setIsManualCamera]);
 
-  // Recenter trigger listener
+  // Recenter when requested or when current location changes initially
   useEffect(() => {
     if (recenterTrigger) {
       setIsManualCamera(false);
+      isDragging.current = false;
     }
   }, [recenterTrigger, setIsManualCamera]);
 
-  // Frame Updates
   useFrame((_, delta) => {
-    if (isManualCamera || !currentCoords) return;
+    if (!currentCoords || typeof currentCoords.x !== 'number' || typeof currentCoords.y !== 'number') return;
 
     const [cx, cy, cz] = pctToWorld(currentCoords.x, currentCoords.y, 0.3);
-
-    let heading = 0;
-    if (nextCoords) {
-      const dx = ((nextCoords.x - currentCoords.x) / 100) * FLOOR_WIDTH;
-      const dz = ((nextCoords.y - currentCoords.y) / 100) * FLOOR_DEPTH;
-      if (Math.hypot(dx, dz) > 0.1) {
-        heading = Math.atan2(dx, dz);
-      }
-    }
-
-    const camDist = 8.5;
-    const camHeight = 7.5;
-    const desiredCamX = cx - Math.sin(heading) * camDist;
-    const desiredCamY = cy + camHeight;
-    const desiredCamZ = cz - Math.cos(heading) * camDist;
+    const camDist = 12;
+    const camHeight = 10;
 
     targetVec.current.set(cx, cy, cz);
-    camVec.current.set(desiredCamX, desiredCamY, desiredCamZ);
-
-    const lerpFactor = Math.min(1.0, delta * 4.5);
+    camVec.current.set(cx, cy + camHeight, cz + camDist);
 
     if (controlsRef.current) {
-      controlsRef.current.target.lerp(targetVec.current, lerpFactor);
-      camera.position.lerp(camVec.current, lerpFactor);
-      controlsRef.current.update();
+      // 1. INSTANT FOCUS ON FIRST LOAD: Jump immediately to current reader position without lerp lag
+      if (!hasInitialized.current) {
+        controlsRef.current.target.copy(targetVec.current);
+        camera.position.copy(camVec.current);
+        controlsRef.current.update();
+        hasInitialized.current = true;
+        return;
+      }
+
+      // 2. Continuous tracking if user is not manually dragging
+      if (!isManualCamera && !isDragging.current) {
+        const lerpFactor = Math.min(1.0, delta * 4.5);
+        controlsRef.current.target.lerp(targetVec.current, lerpFactor);
+        camera.position.lerp(camVec.current, lerpFactor);
+        controlsRef.current.update();
+      }
     }
   });
 
@@ -305,9 +311,12 @@ function NavigationCameraController({
     <OrbitControls
       ref={controlsRef}
       makeDefault
-      enableDamping
-      dampingFactor={0.05}
-      maxPolarAngle={Math.PI / 2 - 0.02}
+      enableDamping={true}
+      dampingFactor={0.12}
+      rotateSpeed={0.8}
+      panSpeed={1.0}
+      zoomSpeed={1.0}
+      maxPolarAngle={Math.PI / 2 - 0.05}
       minDistance={2}
       maxDistance={75}
     />
@@ -387,7 +396,7 @@ export const MB1Native3DMap = ({
       </Canvas>
 
       {/* Status Overlay */}
-      <View style={styles.statusCard}>
+      {/* <View style={styles.statusCard}>
         <View style={styles.liveDot} />
         <View style={styles.statusTextContainer}>
           <Text style={styles.statusLabel}>CURRENT LOCATION</Text>
@@ -396,7 +405,7 @@ export const MB1Native3DMap = ({
         <View style={styles.progressBadge}>
           <Text style={styles.progressText}>{progressPct}%</Text>
         </View>
-      </View>
+      </View> */}
 
       {/* Recenter Button */}
       {isManualCamera && (

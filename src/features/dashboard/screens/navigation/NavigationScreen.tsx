@@ -1405,7 +1405,7 @@ const NavigationScreen = () => {
         if(token){
             const result= await getLive3DPositionByToken(token);
             console.log(result);
-            // setLiveData(result)
+            setLiveData(result)
             // setMergedVisitorLocation(result);
         }
     }
@@ -1678,7 +1678,7 @@ const NavigationScreen = () => {
                 {APP_FLAVOR === 'MB1' ? (
                   
                     //  <MB1NativeMap3D />
-                 <MB1Native3DMap liveData={mergedVisitorLocation}/>
+                 <MB1Native3DMap liveData={liveData}/>
                    
                 ) : (
                     <MB3Native3DMap modelAsset={MODEL_ASSETS[selectedFloor] || MODEL_ASSETS.GR}/>
