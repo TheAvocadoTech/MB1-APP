@@ -5,7 +5,7 @@ import { store } from '../store/store';
 
 import { APP_FLAVOR } from '../config/flavor';
 
-const BASE_URL = APP_FLAVOR === 'MB1' ? 'http://192.168.20.10:8000/api/' : 'https://api.avocadotech.in/';
+const BASE_URL = APP_FLAVOR === 'MB1' ? 'http://192.168.1.70:7000' : 'https://api.avocadotech.in/';
 
 const api = axios.create({
     baseURL: BASE_URL,
@@ -139,12 +139,26 @@ export const deleteData = async (endpoint: string) => {
 
 export const scanQRToken = async (token: string) => {
     try {
-        const response = await api.post('/api/IDVisitor/visitors/scan', { token });
+        // Extract token from:
+        // http://192.168.20.10:7000/temp/?token=VTK_205e73c4a52a61ba
+       
+      
+
+        // GET /api/rfid/live-token/:token
+        const response = await api.get(
+            `/api/rfid/live-token/${encodeURIComponent(token)}`
+        );
+
         return response.data;
-    } catch (error) {
-        if (axios.isAxiosError(error) && error.response) {
-            return error.response.data;
-        }
+
+    } catch (error: any) {
+        console.log('========== API ERROR ==========');
+        console.log('Status:', error?.response?.status);
+        console.log('Data:', error?.response?.data);
+        console.log('URL:', error?.config?.url);
+        console.log('Base URL:', error?.config?.baseURL);
+        console.log('================================');
+
         throw error;
     }
 };
@@ -313,6 +327,8 @@ export const getMapDetails = async (mapId: string) => {
 
 export const getNavigationRoute = async (mapId: string, fromX: number, fromY: number, toX: number, toY: number) => {
     try {
+      
+        console.log(`${BASE_URL}/api/maps/${mapId}/route?fromX=${fromX}&fromY=${fromY}&toX=${toX}&toY=${toY}`);
         const response = await api.get(
             `/api/maps/${mapId}/route?fromX=${fromX}&fromY=${fromY}&toX=${toX}&toY=${toY}`
         );
@@ -322,5 +338,48 @@ export const getNavigationRoute = async (mapId: string, fromX: number, fromY: nu
         return null;
     }
 };
+export const getLive3DPositionByToken = async (
+  token: string,
+) => {
+  try {
+        console.log(`/api/rfid/live-token/${encodeURIComponent(token)}?_t=${Date.now()}`);
 
+    const response = await api.get(
+      `/api/rfid/live-token/${encodeURIComponent(token)}?_t=${Date.now()}`,
+    );
+    //  const response = await axios.get(
+    //   `/api/rfid/live/${tagCode || ""}?_t=${Date.now()}`,
+    // );
+
+    return response.data;
+  } catch (error: any) {
+    console.error(
+      'Error fetching live 3D RFID position:',
+      error?.response?.data || error?.message || error,
+    );
+
+    throw error;
+  }
+};
+export const getReaders = async () => {
+  try {
+       
+
+    const response = await api.get(
+      `api/rfid/readers`,
+    );
+    //  const response = await axios.get(
+    //   `/api/rfid/live/${tagCode || ""}?_t=${Date.now()}`,
+    // );
+
+    return response.data;
+  } catch (error: any) {
+    console.error(
+      'Error fetching live 3D RFID position:',
+      error?.response?.data || error?.message || error,
+    );
+
+    throw error;
+  }
+};
 export default api;

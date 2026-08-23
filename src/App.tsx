@@ -6,7 +6,7 @@ import ScanQr from './features/scan/screens/scanQr/ScanQr'
 import CameraScannerScreen from './features/scan/screens/cameraScanner/CameraScannerScreen'
 import NavigationScreen from './features/dashboard/screens/navigation/NavigationScreen'
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, NavigationIndependentTree } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StyleSheet } from 'react-native';
 import { Provider } from 'react-redux';
@@ -20,17 +20,20 @@ const App = () => {
     return (
         <Provider store={store}>
             <GestureHandlerRootView style={styles.container}>
-                <NavigationContainer>
-                    <Stack.Navigator
-                        screenOptions={{ headerShown: false }}
-                        initialRouteName={initialRoute}>
-                        <Stack.Screen name="splash" component={SplashScreen} />
-                        <Stack.Screen name="dashboard" component={DashboardScreen}/>
-                        <Stack.Screen name="scanQr" component={ScanQr} />
-                        <Stack.Screen name="cameraScanner" component={CameraScannerScreen} />
-                        <Stack.Screen name="navigationScreen" component={NavigationScreen} />
-                    </Stack.Navigator>
-                </NavigationContainer>
+                <NavigationIndependentTree>
+                    <NavigationContainer>
+                        <Stack.Navigator
+                            screenOptions={{ headerShown: false }}
+                            initialRouteName={initialRoute}>
+                            <Stack.Screen name="splash" component={SplashScreen} />
+                            <Stack.Screen name="dashboard" component={DashboardScreen}/>
+                            <Stack.Screen name="scanQr" component={ScanQr} />
+                            <Stack.Screen name="cameraScanner" component={CameraScannerScreen} />
+                            <Stack.Screen name="navigationScreen" component={NavigationScreen} />
+                        </Stack.Navigator>
+                    </NavigationContainer>
+                </NavigationIndependentTree>
+                
             </GestureHandlerRootView>
         </Provider>
     )

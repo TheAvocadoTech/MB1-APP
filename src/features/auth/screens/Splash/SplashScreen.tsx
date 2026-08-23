@@ -44,7 +44,7 @@ const SplashScreen = () => {
             }
 
             try {
-                const savedToken = await AsyncStorage.getItem('user_token');
+                const savedToken = await AsyncStorage.getItem('token');
                 const savedVisitorStr = await AsyncStorage.getItem('user_visitor');
 
                 if (savedToken) {

@@ -7,7 +7,7 @@ import { WebView } from 'react-native-webview';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../../../store/store';
 import { getVisitorLocation } from '../../../../store/slices/cabinetSlice';
-import { getNavigationRoute } from '../../../../services/ApiUtility';
+import { getLive3DPositionByToken, getNavigationRoute, getReaders } from '../../../../services/ApiUtility';
 
 // import { default as Text } from '../../../../components/Text/MSText';
 import { default as Text } from '../../../../components/Text/MSText';
@@ -19,6 +19,7 @@ import { useStyles } from './NavigationScreen.styles';
 import { APP_FLAVOR } from '../../../../config/flavor';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 // import { MB1NativeMap3D } from '../../../../components/Map/MB1NativeMap3D';
+import { MB3Native3DMap } from '../../../../components/Map/MB3Native3DMap';
 import { MB1Native3DMap } from '../../../../components/Map/MB1Native3DMap';
 
 // Retained temporarily as the former WebView implementation while MB1 uses
@@ -1331,7 +1332,8 @@ const STATIC_MB1_VISITOR_LOCATION = {
         purpose: "Meeting",
         checkedIn: true,
         checkedInAt: null,
-        qrExpiresAt: "2026-07-28T08:33:58.062Z"
+        qrExpiresAt: "2026-07-28T08:33:58.062Z",
+       
     },
     location: {
         x: 623.59,
@@ -1356,11 +1358,15 @@ const NavigationScreen = () => {
     const navigation = useNavigation<NativeStackNavigationProp<any>>();
     const route = useRoute<RouteProp<RouteParams, 'NavigationScreen'>>();
     const cabinetName = route.params?.cabinetName || 'GR CL1 R1 0021';
+    const MODEL_ASSETS: Record<string, any> = {
+  F1: require('../../../../assets/models/1st-floor.glb'),
+  GR: require('../../../../assets/models/gr-floor.glb'),
+};
     const dispatch = useDispatch<any>();
 
     // Fetch cabinet data from Redux
     const { cabinetDetails, visitorAssignedCabinet, visitorLocation } = useSelector((state: RootState) => state.cabinet);
-
+     const {token}= useSelector((state: RootState) => state.auth);
     // Resolve activeVisitorLocation incorporating MB1 static defaults if null
     const activeVisitorLocation = visitorLocation || (APP_FLAVOR === 'MB1' ? STATIC_MB1_VISITOR_LOCATION : null);
     const visitorId = activeVisitorLocation?.visitor?.id || activeVisitorLocation?.id;
@@ -1374,6 +1380,8 @@ const NavigationScreen = () => {
     const [pickedModelCoordinate, setPickedModelCoordinate] = useState<ModelCoordinate | null>(null);
     const webViewRef = React.useRef<any>(null);
     const [mergedVisitorLocation, setMergedVisitorLocation] = useState<any>(null);
+      const [liveData, setLiveData] = useState(null);
+
 
     // MB3-F00 is the ground-floor map and must use GRFloor.glb. Rendering its
     // route over the first-floor model puts otherwise-correct coordinates in
@@ -1381,6 +1389,8 @@ const NavigationScreen = () => {
     useEffect(() => {
         if (APP_FLAVOR === 'MB1') {
             setSelectedFloor('GR');
+            fetch3dPosition();
+            fetchReaders();
             return;
         }
         const mapName = activeVisitorLocation?.map?.name?.toUpperCase();
@@ -1391,7 +1401,20 @@ const NavigationScreen = () => {
             setSelectedFloor('F1');
         }
     }, [activeVisitorLocation?.map?.name]);
-
+    const fetch3dPosition=async()=>{
+        if(token){
+            const result= await getLive3DPositionByToken(token);
+            console.log(result);
+            // setLiveData(result)
+            // setMergedVisitorLocation(result);
+        }
+    }
+     const fetchReaders=async()=>{
+       
+            const result= await getReaders();
+            console.log(result);
+        
+    }
     // Fetch live location and update every 3 seconds using setInterval
     useEffect(() => {
         if (!visitorId) return;
@@ -1485,7 +1508,7 @@ const NavigationScreen = () => {
                         route_to_destination: routePayload
                     }
                 };
-                setMergedVisitorLocation(merged);
+                setMergedVisitorLocation(liveData);
             }
         };
 
@@ -1541,9 +1564,10 @@ const NavigationScreen = () => {
 
     const handleSelectFloor = (floor: string) => {
         setSelectedFloor(floor);
-        if (webViewRef.current) {
-            webViewRef.current.injectJavaScript(`window.selectFloor("${floor}"); void(0);`);
-        }
+       
+        // if (webViewRef.current) {
+        //     webViewRef.current.injectJavaScript(`window.selectFloor("${floor}"); void(0);`);
+        
     };
 
     // MB1's native Filament view loads its GLB directly. MB3 keeps its existing
@@ -1654,25 +1678,26 @@ const NavigationScreen = () => {
                 {APP_FLAVOR === 'MB1' ? (
                   
                     //  <MB1NativeMap3D />
-                 <MB1Native3DMap/>
+                 <MB1Native3DMap liveData={mergedVisitorLocation}/>
                    
                 ) : (
-                <WebViewComponent
-                    ref={webViewRef}
-                      originWhitelist={['*']}
-                      source={{
-                          html: HTML_2D_RENDERER,
-                          baseUrl: 'http://localhost:8081'
-                      }}
-                    style={{ flex: 1 }}
-                    onLoadEnd={handleWebViewLoadEnd}
-                    onMessage={handleWebViewMessage}
-                      javaScriptEnabled={true}
-                      domStorageEnabled={true}
-                      mixedContentMode="always"
-                    allowFileAccess={true}
-                    allowUniversalAccessFromFileURLs={true}
-                />
+                    <MB3Native3DMap modelAsset={MODEL_ASSETS[selectedFloor] || MODEL_ASSETS.GR}/>
+                // <WebViewComponent
+                //     ref={webViewRef}
+                //       originWhitelist={['*']}
+                //       source={{
+                //           html: HTML_2D_RENDERER,
+                //           baseUrl: 'http://localhost:8081'
+                //       }}
+                //     style={{ flex: 1 }}
+                //     onLoadEnd={handleWebViewLoadEnd}
+                //     onMessage={handleWebViewMessage}
+                //       javaScriptEnabled={true}
+                //       domStorageEnabled={true}
+                //       mixedContentMode="always"
+                //     allowFileAccess={true}
+                //     allowUniversalAccessFromFileURLs={true}
+                // />
                 )}
                   {/* <MB1NativeMap3D /> */}
                 {loadingModel && (

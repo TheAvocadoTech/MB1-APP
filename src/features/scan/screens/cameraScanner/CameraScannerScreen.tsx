@@ -178,40 +178,47 @@ const CameraScannerScreen = () => {
 
                 setLoading(true);
                 console.log('QR Code Scanned, verifying: ', codeValue);
+                 const tokenMatch = codeValue.match(/[?&]token=([^&]+)/);
 
-                if (APP_FLAVOR === 'MB1') {
-                    const staticVisitor = {
-                        id: 'static-mb1',
-                        visitorName: 'Nirav patel',
-                        company: 'Equinix',
-                        idNumber: 'Tag1',
-                        phoneNumber: '1234567890',
-                        qrCode: 'dummy_qr',
-                        qrExpiresAt: new Date(Date.now() + 40 * 1000).toISOString(),
-                        checkedIn: true
-                    };
-                    Promise.all([
-                        AsyncStorage.setItem('user_token', codeValue),
-                        AsyncStorage.setItem('user_visitor', JSON.stringify(staticVisitor)),
-                    ]).then(() => {
-                        dispatch(setCredentials({ token: codeValue, visitor: staticVisitor }));
-                        navigation.replace('dashboard');
-                    });
-                    return;
-                }
+                    if (!tokenMatch) {
+                        throw new Error('QR token not found in URL');
+                    }
 
-                scanQRToken(codeValue)
+                   const token = decodeURIComponent(tokenMatch[1]);
+                // if (APP_FLAVOR === 'MB1') {
+                //     // const staticVisitor = {
+                //     //     id: 'static-mb1',
+                //     //     visitorName: 'Nirav patel',
+                //     //     company: 'Equinix',
+                //     //     idNumber: 'Tag1',
+                //     //     phoneNumber: '1234567890',
+                //     //     qrCode: 'dummy_qr',
+                //     //     qrExpiresAt: new Date(Date.now() + 40 * 1000).toISOString(),
+                //     //     checkedIn: true
+                //     // };
+                //     // Promise.all([
+                //     //     AsyncStorage.setItem('user_token', codeValue),
+                //     //     AsyncStorage.setItem('user_visitor', JSON.stringify(staticVisitor)),
+                //     // ]).then(() => {
+                //     //     dispatch(setCredentials({ token: codeValue, visitor: staticVisitor }));
+                //     //     navigation.replace('dashboard');
+                //     // });
+                //     return;
+                // }
+
+                scanQRToken(token)
                     .then((res) => {
                         console.log("This is the response of scanQr: ", res);
                         setLoading(false);
-                        if (res && res.success && res.isValid && res.data) {
+                        if (res && res.success && res.data) {
                             // Save user token and details to AsyncStorage
                             Promise.all([
                                 AsyncStorage.setItem('user_token', codeValue),
                                 AsyncStorage.setItem('user_visitor', JSON.stringify(res.data)),
+                                AsyncStorage.setItem('token',token)
                             ]).then(() => {
                                 // Update Redux state
-                                dispatch(setCredentials({ token: codeValue, visitor: res.data }));
+                                dispatch(setCredentials({ token: token, visitor: res.data }));
                                 // Navigate to dashboard
                                 navigation.replace('dashboard');
                             });
