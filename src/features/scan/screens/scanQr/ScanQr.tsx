@@ -9,6 +9,7 @@ import PrimaryButton from '../../../../components/Button/PrimaryButton/PrimaryBu
 import { APP_FLAVOR } from '../../../../config/flavor';
 import { useNavigation } from '@react-navigation/native'
 import { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import { BASE_URL } from '../../../../services/ApiUtility'
 
 const ScanQr = () => {
     const { colors } = useTheme();
@@ -35,7 +36,8 @@ const ScanQr = () => {
                 </View>
 
                 <View style={styles.textContainer}>
-                    <Text varient='medium' style={styles.inactiveText}>Welcome to <Text style={styles.activeText}>{APP_FLAVOR === 'MB1' ? 'Nirav patel, Equinix' : 'EQUINIX'}</Text> Navigation Service </Text>
+                    <Text style={[styles.inactiveText,{fontSize:13}]}>{BASE_URL}</Text>
+                    <Text varient='medium' style={styles.inactiveText}>Welcome to EQUINIX Navigation Service </Text>
                     <Text style={styles.inactiveText}>Scan QR to continue your service</Text>
                 </View>
 

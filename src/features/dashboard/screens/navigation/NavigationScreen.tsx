@@ -1662,14 +1662,15 @@ const NavigationScreen = () => {
                 <View style={styles.redIndicator} />
                 <View style={styles.logoContainer}>
                     <Image source={ImageSource.Logo} style={styles.logo} />
-                    <View style={styles.titleWrapper}>
+                     <Image source={ImageSource.LogoName} style={{height: 15,resizeMode: 'contain'}} />
+                    {/* <View style={styles.titleWrapper}>
                         <Text style={styles.logoTitle} varient="bold">
                             {cabinetDetails?.companyName || "AVOCADO"}
                         </Text>
                         <Text style={styles.logoSubtitle}>
                             {cabinetDetails?.cabinetName || "From seed to screen"}
                         </Text>
-                    </View>
+                    </View> */}
                 </View>
             </View>
 
@@ -1696,7 +1697,7 @@ const NavigationScreen = () => {
                 //       domStorageEnabled={true}
                 //       mixedContentMode="always"
                 //     allowFileAccess={true}
-                //     allowUniversalAccessFromFileURLs={true}
+                //     allowUniversalAccessFromFileURLs={true} 
                 // />
                 )}
                   {/* <MB1NativeMap3D /> */}

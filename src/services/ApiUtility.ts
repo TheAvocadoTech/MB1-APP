@@ -4,8 +4,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { store } from '../store/store';
 
 import { APP_FLAVOR } from '../config/flavor';
+import { Alert } from 'react-native';
 
-const BASE_URL = APP_FLAVOR === 'MB1' ? 'http://192.168.1.70:7000' : 'https://api.avocadotech.in/';
+export const BASE_URL = APP_FLAVOR === 'MB1' ? 'http://192.168.20.10:7000' : 'https://api.avocadotech.in/';
 
 const api = axios.create({
     baseURL: BASE_URL,
@@ -13,6 +14,7 @@ const api = axios.create({
     headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
+       'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36',
     },
 });
 
@@ -139,14 +141,15 @@ export const deleteData = async (endpoint: string) => {
 
 export const scanQRToken = async (token: string) => {
     try {
-        // Extract token from:
-        // http://192.168.20.10:7000/temp/?token=VTK_205e73c4a52a61ba
-       
-      
-
         // GET /api/rfid/live-token/:token
         const response = await api.get(
             `/api/rfid/live-token/${encodeURIComponent(token)}`
+        );
+
+        // Show successful API response details on screen
+        Alert.alert(
+            'API Success',
+            `URL: ${response.config?.baseURL}${response.config?.url}\n\nResponse:\n${JSON.stringify(response.data, null, 2)}`
         );
 
         return response.data;
@@ -158,6 +161,21 @@ export const scanQRToken = async (token: string) => {
         console.log('URL:', error?.config?.url);
         console.log('Base URL:', error?.config?.baseURL);
         console.log('================================');
+
+        // Extract detailed error information
+        const statusCode = error?.response?.status || 'No Status (Network/Server Down)';
+        const baseUrl = error?.config?.baseURL || 'Undefined BaseURL';
+        const requestUrl = error?.config?.url || '';
+        const errorMessage = error?.message || 'Unknown Error';
+        const responseData = error?.response?.data 
+            ? JSON.stringify(error?.response?.data, null, 2) 
+            : 'No response body returned from server';
+
+        // Show error details on screen in Release APK
+        Alert.alert(
+            'API Error Debug',
+            `Full Target URL:\n${baseUrl}${requestUrl}\n\nStatus Code:\n${statusCode}\n\nError Message:\n${errorMessage}\n\nResponse Data:\n${responseData}`
+        );
 
         throw error;
     }

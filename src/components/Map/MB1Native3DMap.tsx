@@ -1,8 +1,8 @@
 import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { View, StyleSheet, Image, Text, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Image, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Canvas, useFrame, useThree } from '@react-three/fiber/native';
 import { useGLTF, OrbitControls } from '@react-three/drei/native';
-import { DoubleSide, MathUtils, Mesh, MeshBasicMaterial, Vector2, Vector3 } from 'three';
+import { DoubleSide, Mesh, MeshBasicMaterial, Vector3 } from 'three';
 
 import { FlatPathLayer, pctToWorld } from './FlatPathLayer';
 import defaultReaders from '../../config/rfidReaders.json';
@@ -11,30 +11,37 @@ import transform from '../../config/mapConfig.json';
 const MB1_CAMPUS_GLB = require('../../assets/models/mb1-campus.glb');
 const resolvedAsset = Image.resolveAssetSource(MB1_CAMPUS_GLB);
 
-const FLOOR_WIDTH = 40;
-const FLOOR_DEPTH = 28;
+// Pre-fetches GLTF into cache before canvas renders
+useGLTF.preload(resolvedAsset.uri);
 
 // ---------------------------------------------------------------------------
-// Helpers & Math
+// 1. Loading Indicator Component
 // ---------------------------------------------------------------------------
-const computeAngle = (from: [number, number, number], to: [number, number, number]): number => {
-  const dx = to[0] - from[0];
-  const dz = to[2] - from[2];
-  if (Math.abs(dx) < 0.0001 && Math.abs(dz) < 0.0001) return 0;
-  return Math.atan2(dx, dz);
+const MapLoadingUI = () => (
+  <View style={styles.loadingOverlay} pointerEvents="none">
+    <ActivityIndicator size="large" color="#0ea5e9" />
+    <Text style={styles.loadingText}>Loading 3D Map...</Text>
+  </View>
+);
+
+// Helper component that notifies parent when GLTF finishes mounting inside Suspense
+const ModelLoaderNotifier = ({ onLoad }: { onLoad: () => void }) => {
+  useEffect(() => {
+    onLoad();
+  }, [onLoad]);
+  return null;
 };
 
 // ---------------------------------------------------------------------------
-// 1. Facility GLTF Model
+// 2. Optimized Model Component
 // ---------------------------------------------------------------------------
 const FacilityModel = ({ liveTransform }: { liveTransform?: any }) => {
   const { scene } = useGLTF(resolvedAsset.uri);
-  const clonedScene = useMemo(() => scene.clone(true), [scene]);
   const t = liveTransform || transform;
 
   return (
     <primitive
-      object={clonedScene}
+      object={scene}
       position={[t.position.x, t.position.y, t.position.z]}
       rotation={[0, t.rotationY, 0]}
       scale={t.scale}
@@ -43,7 +50,7 @@ const FacilityModel = ({ liveTransform }: { liveTransform?: any }) => {
 };
 
 // ---------------------------------------------------------------------------
-// 2. Render All Readers as Static Round Circles (Excludes Active Next Target)
+// 3. Static Readers Markers
 // ---------------------------------------------------------------------------
 const AllReadersMarkers = ({
   allReaders,
@@ -69,8 +76,7 @@ const AllReadersMarkers = ({
     <group>
       {markers.map((m) => (
         <mesh key={m.key} position={m.position} rotation={[-Math.PI / 2, 0, 0]}>
-          {/* Reduced radius from 0.5 to 0.25 */}
-          <circleGeometry args={[0.25, 32]} />
+          <circleGeometry args={[0.12, 16]} />
           <meshBasicMaterial color="#64748b" transparent opacity={0.5} side={DoubleSide} />
         </mesh>
       ))}
@@ -79,11 +85,13 @@ const AllReadersMarkers = ({
 };
 
 // ---------------------------------------------------------------------------
-// 3. Lime Green Pulsing Ring ONLY at NEXT READER Target (#84cc16)
+// 4. Pulsing Ring Target
 // ---------------------------------------------------------------------------
 const NextLocationRing = ({ coords }: { coords?: { x: number; y: number } | null }) => {
-  const meshRef = useRef<Mesh>(null);
-  const materialRef = useRef<MeshBasicMaterial>(null);
+  const meshRef1 = useRef<Mesh>(null);
+  const materialRef1 = useRef<MeshBasicMaterial>(null);
+  const meshRef2 = useRef<Mesh>(null);
+  const materialRef2 = useRef<MeshBasicMaterial>(null);
 
   const positionTuple = useMemo((): [number, number, number] | null => {
     if (!coords || !Number.isFinite(coords.x) || !Number.isFinite(coords.y)) {
@@ -94,15 +102,24 @@ const NextLocationRing = ({ coords }: { coords?: { x: number; y: number } | null
 
   useFrame(({ clock }) => {
     const time = clock.getElapsedTime();
-    const cycle = (time * 2) % 1; // 0.5s pulse loop
+    const SPEED = 3.5;
 
-    if (meshRef.current) {
-      // Reduced max pulse scale expansion (0.6 -> 1.1 instead of 0.8 -> 2.0)
-      const scale = 0.6 + cycle * 0.5;
-      meshRef.current.scale.set(scale, scale, 1);
+    const cycle1 = (time * SPEED) % 1;
+    if (meshRef1.current) {
+      const scale1 = 0.4 + cycle1 * 1.8;
+      meshRef1.current.scale.set(scale1, scale1, 1);
     }
-    if (materialRef.current) {
-      materialRef.current.opacity = 1 - cycle;
+    if (materialRef1.current) {
+      materialRef1.current.opacity = Math.pow(1 - cycle1, 1.5);
+    }
+
+    const cycle2 = (time * SPEED + 0.5) % 1;
+    if (meshRef2.current) {
+      const scale2 = 0.4 + cycle2 * 1.8;
+      meshRef2.current.scale.set(scale2, scale2, 1);
+    }
+    if (materialRef2.current) {
+      materialRef2.current.opacity = Math.pow(1 - cycle2, 1.5);
     }
   });
 
@@ -110,134 +127,34 @@ const NextLocationRing = ({ coords }: { coords?: { x: number; y: number } | null
 
   return (
     <group position={positionTuple} rotation={[-Math.PI / 2, 0, 0]}>
-      {/* Outer Lime Pulsing Ring (Reduced radius args from [0.8, 1.1] to [0.4, 0.55]) */}
-      <mesh ref={meshRef}>
-        <ringGeometry args={[0.4, 0.55, 32]} />
-        <meshBasicMaterial ref={materialRef} color="#84cc16" transparent side={DoubleSide} />
+      <mesh ref={meshRef1}>
+        <ringGeometry args={[0.18, 0.22, 24]} />
+        <meshBasicMaterial ref={materialRef1} color="#84cc16" transparent side={DoubleSide} depthTest={false} />
       </mesh>
 
-      {/* Inner Solid Core (Reduced radius args from 0.7 to 0.35) */}
-      <mesh>
-        <circleGeometry args={[0.35, 32]} />
-        <meshBasicMaterial color="#84cc16" transparent opacity={0.8} side={DoubleSide} />
+      <mesh ref={meshRef2}>
+        <ringGeometry args={[0.18, 0.22, 24]} />
+        <meshBasicMaterial ref={materialRef2} color="#84cc16" transparent side={DoubleSide} depthTest={false} />
+      </mesh>
+
+      <mesh position={[0, 0, 0.001]}>
+        <circleGeometry args={[0.14, 24]} />
+        <meshBasicMaterial color="#84cc16" transparent opacity={0.9} side={DoubleSide} depthTest={false} />
       </mesh>
     </group>
   );
 };
 
 // ---------------------------------------------------------------------------
-// 4. Cyan Chevrons (>25° Turns) & Orientation Arrow (#06b6d4)
-// ---------------------------------------------------------------------------
-const DirectionalOverlay = ({ remainingPath }: { remainingPath: any[] }) => {
-  const { chevrons, activeVector } = useMemo(() => {
-    if (!remainingPath || remainingPath.length < 2) {
-      return { chevrons: [], activeVector: null };
-    }
-
-    const pointsWithData = remainingPath
-      .filter(
-        (item) =>
-          item?.coords &&
-          Number.isFinite(item.coords.x) &&
-          Number.isFinite(item.coords.y)
-      )
-      .map((item) => ({
-        point: pctToWorld(item.coords.x, item.coords.y, 0.05),
-        id: item.id || item.readerId || `${item.coords.x}-${item.coords.y}`,
-      }));
-
-    if (pointsWithData.length < 2) {
-      return { chevrons: [], activeVector: null };
-    }
-
-    const turnChevrons: Array<{ key: string; position: [number, number, number]; rotation: number }> = [];
-
-    // Identify turns sharper than 25 degrees
-    for (let i = 0; i < pointsWithData.length - 2; i++) {
-      const p1 = pointsWithData[i].point;
-      const p2 = pointsWithData[i + 1].point;
-      const p3 = pointsWithData[i + 2].point;
-
-      const v1 = new Vector2(p2[0] - p1[0], p2[2] - p1[2]);
-      const v2 = new Vector2(p3[0] - p2[0], p3[2] - p2[2]);
-
-      if (v1.lengthSq() < 0.0001 || v2.lengthSq() < 0.0001) continue;
-
-      const dir1 = v1.normalize();
-      const dir2 = v2.normalize();
-
-      const dot = MathUtils.clamp(dir1.dot(dir2), -1, 1);
-      const angleRad = Math.acos(dot);
-      const angleDeg = MathUtils.radToDeg(angleRad);
-
-      if (!Number.isNaN(angleDeg) && angleDeg > 25) {
-        const turnAngle = computeAngle(p2, p3);
-        turnChevrons.push({
-          key: `chevron-${pointsWithData[i + 1].id}-${i}`,
-          position: [p2[0], p2[1] + 0.02, p2[2]],
-          rotation: Number.isNaN(turnAngle) ? 0 : turnAngle,
-        });
-      }
-    }
-
-    // Orientation arrow for active segment
-    const currentPos = pointsWithData[0].point;
-    const nextPos = pointsWithData[1].point;
-    const arrowAngle = computeAngle(currentPos, nextPos);
-
-    return {
-      chevrons: turnChevrons,
-      activeVector: {
-        position: [currentPos[0], currentPos[1] + 0.05, currentPos[2]] as [number, number, number],
-        rotation: Number.isNaN(arrowAngle) ? 0 : arrowAngle,
-      },
-    };
-  }, [remainingPath]);
-
-  return (
-    <group>
-      {/* Cyan Chevrons */}
-      {chevrons.map((chev) => (
-        <group
-          key={chev.key}
-          position={chev.position}
-          rotation={[-Math.PI / 2, 0, chev.rotation]}
-        >
-          <mesh>
-            <ringGeometry args={[0.5, 0.7, 3, 1, 0, Math.PI]} />
-            <meshBasicMaterial color="#06b6d4" side={DoubleSide} />
-          </mesh>
-        </group>
-      ))}
-
-      {/* Orientation Cone */}
-      {activeVector && (
-        <group
-          position={activeVector.position}
-          rotation={[0, activeVector.rotation, 0]}
-        >
-          <mesh position={[0, 0, 1.2]} rotation={[Math.PI / 2, 0, 0]}>
-            <coneGeometry args={[0.5, 1.2, 16]} />
-            <meshBasicMaterial color="#06b6d4" />
-          </mesh>
-        </group>
-      )}
-    </group>
-  );
-};
-
-// ---------------------------------------------------------------------------
-// 5. Navigation Camera Controller & Orbit Controls
+// 5. Horizontally Offscreen Left Shift Controller
 // ---------------------------------------------------------------------------
 function NavigationCameraController({
   currentCoords,
-  nextCoords,
   isManualCamera,
   setIsManualCamera,
   recenterTrigger,
 }: {
-  currentCoords: any;
-  nextCoords: any;
+  currentCoords: { x: number; y: number } | null | undefined;
   isManualCamera: boolean;
   setIsManualCamera: (val: boolean) => void;
   recenterTrigger: any;
@@ -246,63 +163,114 @@ function NavigationCameraController({
   const controlsRef = useRef<any>(null);
   const targetVec = useRef(new Vector3());
   const camVec = useRef(new Vector3());
-  const isDragging = useRef(false);
-  const hasInitialized = useRef(false);
+
+  const isInteracting = useRef(false);
+  const isManualRef = useRef(isManualCamera);
+  const lastCoordsRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Overhead elevation distance
+  const OVERHEAD_HEIGHT = 80;
+
+  // HORIZONTAL SHIFT: Increase this number to shift the map further to the LEFT
+  const X_OFFSET = 12;
+
+  // Orient top-vector for proper map axis alignment
+  useEffect(() => {
+    camera.up.set(0, 0, -1);
+    camera.updateProjectionMatrix();
+  }, [camera]);
+
+  useEffect(() => {
+    isManualRef.current = isManualCamera;
+  }, [isManualCamera]);
 
   useEffect(() => {
     const controls = controlsRef.current;
     if (!controls) return;
 
     const handleStart = () => {
-      isDragging.current = true;
-      setIsManualCamera(true);
+      isInteracting.current = true;
+      if (!isManualRef.current) {
+        isManualRef.current = true;
+        setIsManualCamera(true);
+      }
     };
+
     const handleEnd = () => {
-      isDragging.current = false;
+      isInteracting.current = false;
     };
 
     controls.addEventListener('start', handleStart);
     controls.addEventListener('end', handleEnd);
+
     return () => {
       controls.removeEventListener('start', handleStart);
       controls.removeEventListener('end', handleEnd);
     };
   }, [setIsManualCamera]);
 
-  // Recenter when requested or when current location changes initially
   useEffect(() => {
     if (recenterTrigger) {
+      isManualRef.current = false;
       setIsManualCamera(false);
-      isDragging.current = false;
+      isInteracting.current = false;
+
+      if (currentCoords && Number.isFinite(currentCoords.x) && Number.isFinite(currentCoords.y)) {
+        const [cx, cy, cz] = pctToWorld(currentCoords.x, currentCoords.y, 0);
+
+        targetVec.current.set(cx + X_OFFSET, cy, cz);
+        camVec.current.set(cx + X_OFFSET, cy + OVERHEAD_HEIGHT, cz);
+
+        if (controlsRef.current) {
+          controlsRef.current.target.copy(targetVec.current);
+          camera.position.copy(camVec.current);
+          controlsRef.current.update();
+        }
+      }
     }
-  }, [recenterTrigger, setIsManualCamera]);
+  }, [recenterTrigger, currentCoords, camera, setIsManualCamera]);
+
+  useEffect(() => {
+    if (currentCoords && Number.isFinite(currentCoords.x) && Number.isFinite(currentCoords.y)) {
+      const prev = lastCoordsRef.current;
+      const isNewReader = !prev || prev.x !== currentCoords.x || prev.y !== currentCoords.y;
+
+      if (isNewReader) {
+        lastCoordsRef.current = { x: currentCoords.x, y: currentCoords.y };
+
+        const [cx, cy, cz] = pctToWorld(currentCoords.x, currentCoords.y, 0);
+
+        targetVec.current.set(cx + X_OFFSET, cy, cz);
+        camVec.current.set(cx + X_OFFSET, cy + OVERHEAD_HEIGHT, cz);
+
+        if (controlsRef.current) {
+          controlsRef.current.target.copy(targetVec.current);
+          camera.position.copy(camVec.current);
+          controlsRef.current.update();
+        }
+
+        isManualRef.current = false;
+        setIsManualCamera(false);
+        isInteracting.current = false;
+      }
+    }
+  }, [currentCoords?.x, currentCoords?.y, camera, setIsManualCamera]);
 
   useFrame((_, delta) => {
-    if (!currentCoords || typeof currentCoords.x !== 'number' || typeof currentCoords.y !== 'number') return;
+    const controls = controlsRef.current;
+    if (!controls) return;
 
-    const [cx, cy, cz] = pctToWorld(currentCoords.x, currentCoords.y, 0.3);
-    const camDist = 12;
-    const camHeight = 10;
+    if (!isManualRef.current && !isInteracting.current) {
+      if (currentCoords && Number.isFinite(currentCoords.x) && Number.isFinite(currentCoords.y)) {
+        const [cx, cy, cz] = pctToWorld(currentCoords.x, currentCoords.y, 0);
 
-    targetVec.current.set(cx, cy, cz);
-    camVec.current.set(cx, cy + camHeight, cz + camDist);
+        targetVec.current.set(cx + X_OFFSET, cy, cz);
+        camVec.current.set(cx + X_OFFSET, cy + OVERHEAD_HEIGHT, cz);
 
-    if (controlsRef.current) {
-      // 1. INSTANT FOCUS ON FIRST LOAD: Jump immediately to current reader position without lerp lag
-      if (!hasInitialized.current) {
-        controlsRef.current.target.copy(targetVec.current);
-        camera.position.copy(camVec.current);
-        controlsRef.current.update();
-        hasInitialized.current = true;
-        return;
-      }
-
-      // 2. Continuous tracking if user is not manually dragging
-      if (!isManualCamera && !isDragging.current) {
-        const lerpFactor = Math.min(1.0, delta * 4.5);
-        controlsRef.current.target.lerp(targetVec.current, lerpFactor);
+        const lerpFactor = Math.min(1.0, delta * 6.0);
+        controls.target.lerp(targetVec.current, lerpFactor);
         camera.position.lerp(camVec.current, lerpFactor);
-        controlsRef.current.update();
+        controls.update();
       }
     }
   });
@@ -311,14 +279,14 @@ function NavigationCameraController({
     <OrbitControls
       ref={controlsRef}
       makeDefault
-      enableDamping={true}
-      dampingFactor={0.12}
-      rotateSpeed={0.8}
-      panSpeed={1.0}
-      zoomSpeed={1.0}
-      maxPolarAngle={Math.PI / 2 - 0.05}
+      enableDamping={false}
+      rotateSpeed={1.5}
+      panSpeed={2.2}
+      zoomSpeed={1.5}
+      enablePan={true}
+      screenSpacePanning={true}
       minDistance={2}
-      maxDistance={75}
+      maxDistance={200}
     />
   );
 }
@@ -333,25 +301,23 @@ export const MB1Native3DMap = ({
   liveData?: any;
   liveTransform?: any;
 }) => {
-  const allReaders = liveData?.allReaders?.length ? liveData.allReaders : defaultReaders;
-  const currentReader = liveData?.currentReader || defaultReaders[0];
+  const payload = liveData?.data || liveData;
+
+  const allReaders = payload?.allReaders?.length ? payload.allReaders : defaultReaders;
+  const currentReader = payload?.currentReader || liveData?.currentReader || defaultReaders[0];
   const currentSeq = currentReader?.sequence || 1;
-  const totalStops = allReaders.filter((r: any) => !r.isWaypoint).length;
-  const progressPct = totalStops > 1 ? Math.round(((currentSeq - 1) / (totalStops - 1)) * 100) : 0;
 
   const remainingReaders = useMemo(() => {
-    if (liveData?.data?.remainingPath?.length) {
-      return liveData.data.remainingPath;
-    }
-    if (liveData?.remainingPath?.length) {
-      return liveData.remainingPath;
+    if (payload?.remainingPath?.length) {
+      return payload.remainingPath;
     }
     return allReaders.filter((r: any) => r.sequence >= currentSeq);
-  }, [liveData, allReaders, currentSeq]);
+  }, [payload, allReaders, currentSeq]);
 
   const currentCoords = currentReader?.coords;
   const nextCoords = remainingReaders.length > 1 ? remainingReaders[1]?.coords : null;
 
+  const [isLoading, setIsLoading] = useState(true);
   const [isManualCamera, setIsManualCamera] = useState(false);
   const [recenterTrigger, setRecenterTrigger] = useState(0);
 
@@ -362,32 +328,30 @@ export const MB1Native3DMap = ({
 
   return (
     <View style={styles.container}>
+      {/* Show Loading Indicator until Suspense resolves */}
+      {isLoading && <MapLoadingUI />}
+
       <Canvas
+        gl={{ powerPreference: 'high-performance', antialias: false }}
         camera={{
-          position: [0, 25, 25],
+          position: [12, 80, 0], // Initial camera position shifted right to pull UI left
           fov: 45,
           near: 0.1,
-          far: 100000,
-        }}
-        onTouchStart={() => setIsManualCamera(true)}>
-        <ambientLight intensity={0.8} />
-        <directionalLight position={[15, 30, 15]} intensity={1.2} />
-        <directionalLight position={[-15, 20, -15]} intensity={0.5} />
+          far: 10000,
+        }}>
+        <ambientLight intensity={0.9} />
+        <directionalLight position={[0, 80, 0]} intensity={1.2} />
 
         <Suspense fallback={null}>
           <FacilityModel liveTransform={liveTransform} />
+          <ModelLoaderNotifier onLoad={() => setIsLoading(false)} />
           <FlatPathLayer liveData={liveData} />
 
-          {/* All reader locations as neutral circular dots */}
           <AllReadersMarkers allReaders={allReaders} nextCoords={nextCoords} />
-
-          {/* Lime Green Pulsing Ring rendered strictly at nextCoords */}
           <NextLocationRing coords={nextCoords} />
-          {/* <DirectionalOverlay remainingPath={remainingReaders} /> */}
 
           <NavigationCameraController
             currentCoords={currentCoords}
-            nextCoords={nextCoords}
             isManualCamera={isManualCamera}
             setIsManualCamera={setIsManualCamera}
             recenterTrigger={recenterTrigger}
@@ -395,20 +359,8 @@ export const MB1Native3DMap = ({
         </Suspense>
       </Canvas>
 
-      {/* Status Overlay */}
-      {/* <View style={styles.statusCard}>
-        <View style={styles.liveDot} />
-        <View style={styles.statusTextContainer}>
-          <Text style={styles.statusLabel}>CURRENT LOCATION</Text>
-          <Text style={styles.locationTitle}>{currentReader?.location || 'Unknown'}</Text>
-        </View>
-        <View style={styles.progressBadge}>
-          <Text style={styles.progressText}>{progressPct}%</Text>
-        </View>
-      </View> */}
-
       {/* Recenter Button */}
-      {isManualCamera && (
+      {isManualCamera && !isLoading && (
         <TouchableOpacity style={styles.recenterButton} onPress={handleRecenter}>
           <Text style={styles.recenterText}>Recenter</Text>
         </TouchableOpacity>
@@ -424,66 +376,29 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#f8fafc',
   },
-  statusCard: {
-    position: 'absolute',
-    top: 50,
-    left: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    flexDirection: 'row',
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 20,
+    backgroundColor: '#f8fafc',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 12,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
   },
-  liveDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#ef4444',
-  },
-  statusTextContainer: {
-    flexDirection: 'column',
-  },
-  statusLabel: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#6b7280',
-    letterSpacing: 0.5,
-  },
-  locationTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#1f2937',
-  },
-  progressBadge: {
-    backgroundColor: '#e0f2fe',
-    paddingVertical: 3,
-    paddingHorizontal: 9,
-    borderRadius: 12,
-  },
-  progressText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#0ea5e9',
+  loadingText: {
+    marginTop: 12,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#334155',
   },
   recenterButton: {
     position: 'absolute',
     bottom: 30,
-    right: 20,
+    left: 20,
     backgroundColor: 'rgba(15, 23, 42, 0.9)',
     borderRadius: 30,
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderWidth: 1,
-    
+    borderColor: '#334155',
     elevation: 5,
   },
   recenterText: {

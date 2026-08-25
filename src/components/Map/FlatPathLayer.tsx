@@ -99,27 +99,16 @@ export function FlatPathLayer({ liveData }: { liveData?: any }) {
 
       {/* ── 2. Active remaining path line (glowing cyan) ── */}
       {remainingPoints3D.length > 1 && (
-        <>
-          {/* Outer glow line */}
-          {/* <Line
-            points={remainingPoints3D}
-            color="#0ea5e9"
-            opacity={0.3}
-            transparent
-            lineWidth={3.5} // Reduced from 7
-            depthTest={false}
-            depthWrite={false}
-          /> */}
-          {/* Inner core line */}
-          <Line
-            points={remainingPoints3D}
-            color="#0ea5e9"
-            lineWidth={1.2} // Reduced from 2.5
-            depthTest={false}
-            depthWrite={false}
-          />
-        </>
-      )}
+  <Line
+    points={remainingPoints3D}
+    color="#00a3ff" // Vibrant solid blue matching reference image
+    lineWidth={3.5} // Increased thickness significantly
+    opacity={1.0}
+    transparent={false}
+    depthTest={false}
+    depthWrite={false}
+  />
+)}
 
       {/* ── 3. Current Active Reader Ring ── */}
       {allReaders.map((r: any) => {
@@ -131,12 +120,15 @@ export function FlatPathLayer({ liveData }: { liveData?: any }) {
 
         return (
           <group key={r.id} position={[wx, wy, wz]} rotation={[-Math.PI / 2, 0, 0]}>
-            <mesh>
-              <circleGeometry args={[0.5, 32]} />
+            {/* Outer transparent circle: radius reduced from 0.5 to 0.25 */}
+            {/* <mesh>
+              <circleGeometry args={[0.7, 32]} />
               <meshBasicMaterial color="#84cc16" opacity={0.22} transparent depthTest={false} depthWrite={false} />
-            </mesh>
+            </mesh> */}
+
+            {/* Inner ring: inner/outer radii reduced from [0.25, 0.32] to [0.12, 0.16] */}
             <mesh>
-              <ringGeometry args={[0.25, 0.32, 32]} />
+              <ringGeometry args={[0.4, 0.48, 32]} />
               <meshBasicMaterial color="#84cc16" depthTest={false} depthWrite={false} />
             </mesh>
           </group>
@@ -145,34 +137,37 @@ export function FlatPathLayer({ liveData }: { liveData?: any }) {
 
       {/* ── 4. Turn Chevrons at direction-change points ── */}
       {allReaders.map((r: any, i: number) => {
-        if (!isTurnPoint(allReaders, i)) return null;
-        if (r.sequence < currentSeq) return null;
+  if (!isTurnPoint(allReaders, i)) return null;
+  if (r.sequence < currentSeq) return null;
 
-        const [wx, wy, wz] = pctToWorld(r.coords.x, r.coords.y, 0.18);
-        const next = allReaders[i + 1].coords;
-        const angle = angleBetween(r.coords, next);
+  const [wx, wy, wz] = pctToWorld(r.coords.x, r.coords.y, 0.18);
+  const next = allReaders[i + 1].coords;
+  const angle = angleBetween(r.coords, next);
 
-        const chevHaloPoints: [number, number, number][] = [
-          [-0.25, 0, -0.2],
-          [0,     0,  0.25],
-          [0.25,  0, -0.2],
-        ];
-        const chevCorePoints: [number, number, number][] = [
-          [-0.22, 0, -0.18],
-          [0,     0,  0.23],
-          [0.22,  0, -0.18],
-        ];
+  // Scaled down chevron coordinates (50% smaller)
+  const chevHaloPoints: [number, number, number][] = [
+    [-0.125, 0, -0.1],
+    [0,      0,  0.125],
+    [0.125,  0, -0.1],
+  ];
+  const chevCorePoints: [number, number, number][] = [
+    [-0.11,  0, -0.09],
+    [0,      0,  0.115],
+    [0.11,   0, -0.09],
+  ];
 
-        const offX = Math.sin(angle) * 0.6;
-        const offZ = Math.cos(angle) * 0.6;
+  // Slightly tighter offset so the smaller chevron stays close to the turn point
+  const offX = Math.sin(angle) * 0.35;
+  const offZ = Math.cos(angle) * 0.35;
 
-        return (
-          <group key={`turn-${r.id}`} position={[wx + offX, wy, wz + offZ]} rotation={[0, angle, 0]}>
-            <Line points={chevHaloPoints} color="rgba(255,255,255,0.9)" lineWidth={4.5} depthTest={false} depthWrite={false} />
-            <Line points={chevCorePoints} color="#0ea5e9" lineWidth={2.8} depthTest={false} depthWrite={false} />
-          </group>
-        );
-      })}
+  return (
+    <group key={`turn-${r.id}`} position={[wx + offX, wy, wz + offZ]} rotation={[0, angle, 0]}>
+      {/* Reduced lineWidth for crisp rendering at smaller size */}
+      <Line points={chevHaloPoints} color="rgba(255,255,255,0.9)" lineWidth={4.1} depthTest={false} depthWrite={false} />
+      <Line points={chevCorePoints} color="#0ea5e9" lineWidth={1.5} depthTest={false} depthWrite={false} />
+    </group>
+  );
+})}
 
       {/* ── 5. Leading direction arrow at current position ── */}
       {remainingReaders.length > 1 && (() => {

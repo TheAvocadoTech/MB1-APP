@@ -21,9 +21,9 @@ import { APP_FLAVOR } from '../../../../config/flavor';
 const DashboardScreen = () => {
     const navigation = useNavigation<NativeStackNavigationProp<any>>();
     const dispatch = useDispatch<AppDispatch>();
-    
+     const {cabinetDetails} = useSelector((state: RootState) => state.cabinet);
     // Redux auth details
-    const { visitor, token } = useSelector((state: RootState) => state.auth);
+    const { visitor, token } = useSelector((state: RootState) => state.auth); 
 
     const [showModal, setShowModal] = useState<boolean>(false);
     const [selectedTab, setSelectedTab] = React.useState<'cabinets' | 'common'>('cabinets');
@@ -306,7 +306,7 @@ const DashboardScreen = () => {
                 </View>
                 {/* label container */}
                 <View style={styles.labelContainer}>
-                    <Text style={styles.labelRegular} varient='medium' >Kindly select the below cabinets belonging to <Text style={[styles.labelRegular, styles.labelBold]} varient='semiBold'>{visitor?.company || 'Avocado Tech PVT'}</Text></Text>
+                    <Text style={styles.labelRegular} varient='medium' >Kindly select the below cabinets belonging to  {visitor?.company || "Equinix"}</Text>
                 </View>
 
                 <View style={styles.rowContainer}>

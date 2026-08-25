@@ -39,7 +39,8 @@ const CameraScannerScreen = () => {
 
     const device = useCameraDevice(cameraPos);
     const scanValue = useRef(new Animated.Value(0)).current;
-
+        const {token } = useSelector((state: RootState) => state.auth);
+    
     // Request camera permission on mount
     // useEffect(() => {
     //     if (permissionStatus === 'not-determined') {
@@ -279,7 +280,7 @@ const CameraScannerScreen = () => {
     });
 
     const qrValue = APP_FLAVOR === 'MB1'
-        ? 'http://192.168.20.10:3000/'
+        ? `http://192.168.20.10:3000/temp/?token=${token}`
         : 'https://equinix-temp.avocadotech.in/';
 
     // Render loading or error states
