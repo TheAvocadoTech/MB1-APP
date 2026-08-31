@@ -8,3 +8,12 @@
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
 # Add any project specific keep options here:
+# Keep Three.js and standard standard library class names intact
+-keep class com.facebook.react.** { *; }
+-keepclassmembers class * {
+    *** getName();
+}
+
+# Preserve Three.js and React Three Fiber class structures
+-keep class org.threejs.** { *; }
+-keep class com.reactthree.** { *; }

@@ -21,6 +21,8 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 // import { MB1NativeMap3D } from '../../../../components/Map/MB1NativeMap3D';
 import { MB3Native3DMap } from '../../../../components/Map/MB3Native3DMap';
 import { MB1Native3DMap } from '../../../../components/Map/MB1Native3DMap';
+import { setFloor,updateLiveLocation } from '../../../../store/slices/floorSlice';
+import { MB3Native3DMap_F1 } from '../../../../components/Map/MB3Native3DMap_F1';
 
 // Retained temporarily as the former WebView implementation while MB1 uses
 // the native Filament renderer below.
@@ -1366,10 +1368,11 @@ const NavigationScreen = () => {
 
     // Fetch cabinet data from Redux
     const { cabinetDetails, visitorAssignedCabinet, visitorLocation } = useSelector((state: RootState) => state.cabinet);
-     const {token}= useSelector((state: RootState) => state.auth);
+     const {visitor,token}= useSelector((state: RootState) => state.auth);
     // Resolve activeVisitorLocation incorporating MB1 static defaults if null
     const activeVisitorLocation = visitorLocation || (APP_FLAVOR === 'MB1' ? STATIC_MB1_VISITOR_LOCATION : null);
-    const visitorId = activeVisitorLocation?.visitor?.id || activeVisitorLocation?.id;
+    // const visitorId = activeVisitorLocation?.visitor?.id || activeVisitorLocation?.id;
+    const visitorId=visitor?.id;
 
     const { colors } = useTheme();
     const styles = useStyles(colors);
@@ -1429,6 +1432,30 @@ const NavigationScreen = () => {
         const interval = setInterval(pollLocation, 3000);
         return () => clearInterval(interval);
     }, [dispatch, visitorId]);
+    useEffect(()=>{
+      dispatch(updateLiveLocation(visitorLocation));
+      if(visitorLocation)
+        if (visitorLocation.bleSignal) {
+          dispatch(updateLiveLocation({
+            bleSignal: {
+              rssi: visitorLocation.bleSignal.rssi,
+              raw_rssi: visitorLocation.bleSignal.raw_rssi,
+              beam: visitorLocation.bleSignal.beam,
+              ap_mac: visitorLocation.bleSignal.ap_mac,
+              last_seen: visitorLocation.bleSignal.last_seen || Date.now() / 1000,
+              x: visitorLocation.bleSignal.x,
+              y: visitorLocation.bleSignal.y,
+              x_m: visitorLocation.bleSignal.x_m,
+              y_m: visitorLocation.bleSignal.y_m,
+              queueSize: visitorLocation.bleSignal.queueSize,
+              queueCapacity: visitorLocation.bleSignal.queueCapacity,
+              rssiThreshold: visitorLocation.bleSignal.rssiThreshold,
+            }
+          }));
+        }
+     
+
+    },[visitorLocation])
 
     // Watch visitorLocation and selectedFloor, calculate path route dynamically, and merge
     useEffect(() => {
@@ -1497,6 +1524,8 @@ const NavigationScreen = () => {
 
             console.log(`Calculating navigation route via API: mapId=${mapId}, from=(${fromX},${fromY}), to=(${toX},${toY})`);
             const routeRes = await getNavigationRoute(mapId, fromX, fromY, toX, toY);
+            //   const routeRes = await getNavigationRoute(mapId);
+
             
             const routePayload = routeRes?.data?.route || routeRes?.route || routeRes?.data || routeRes;
             
@@ -1508,7 +1537,7 @@ const NavigationScreen = () => {
                         route_to_destination: routePayload
                     }
                 };
-                setMergedVisitorLocation(liveData);
+                setMergedVisitorLocation(merged);
             }
         };
 
@@ -1564,7 +1593,7 @@ const NavigationScreen = () => {
 
     const handleSelectFloor = (floor: string) => {
         setSelectedFloor(floor);
-       
+        dispatch(setFloor(floor));
         // if (webViewRef.current) {
         //     webViewRef.current.injectJavaScript(`window.selectFloor("${floor}"); void(0);`);
         
@@ -1681,8 +1710,9 @@ const NavigationScreen = () => {
                     //  <MB1NativeMap3D />
                  <MB1Native3DMap liveData={liveData}/>
                    
-                ) : (
-                    <MB3Native3DMap modelAsset={MODEL_ASSETS[selectedFloor] || MODEL_ASSETS.GR}/>
+                ) : (selectedFloor==='GR'?( <MB3Native3DMap/>):
+                (<MB3Native3DMap_F1 />)
+                   
                 // <WebViewComponent
                 //     ref={webViewRef}
                 //       originWhitelist={['*']}

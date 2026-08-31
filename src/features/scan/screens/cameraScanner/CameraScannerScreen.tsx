@@ -5,6 +5,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Camera, useCameraDevice, useCameraPermission, useCodeScanner, CameraPermissionStatus } from 'react-native-vision-camera';
 import { useDispatch, useSelector } from 'react-redux';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import QRCode from 'react-native-qrcode-svg';
 
 import { default as Text } from '../../../../components/Text/MSText';
 import { ImageSource } from '../../../../constants/assets/images';
@@ -178,14 +179,18 @@ const CameraScannerScreen = () => {
                 }
 
                 setLoading(true);
+                let token:string;
                 console.log('QR Code Scanned, verifying: ', codeValue);
                  const tokenMatch = codeValue.match(/[?&]token=([^&]+)/);
 
-                    if (!tokenMatch) {
-                        throw new Error('QR token not found in URL');
-                    }
+                   if(tokenMatch&&tokenMatch[1]){
+                       token = decodeURIComponent(tokenMatch[1]);
+                   }
+                   else{
+                    token=codeValue;
+                   }
 
-                   const token = decodeURIComponent(tokenMatch[1]);
+                  
                 // if (APP_FLAVOR === 'MB1') {
                 //     // const staticVisitor = {
                 //     //     id: 'static-mb1',
@@ -280,7 +285,7 @@ const CameraScannerScreen = () => {
     });
 
     const qrValue = APP_FLAVOR === 'MB1'
-        ? `http://192.168.20.10:3000/temp/?token=${token}`
+        ? `http://192.168.20.10:3000/?token=${token}`
         : 'https://equinix-temp.avocadotech.in/';
 
     // Render loading or error states
@@ -341,7 +346,8 @@ const CameraScannerScreen = () => {
                     shadowOpacity: 0.3,
                     shadowRadius: 16,
                     elevation: 10,
-                    marginTop: 80
+                    marginTop: 80,
+                    gap:10
                 }}>
                     <Text style={{ fontSize: 20, color: '#333333', fontWeight: 'bold', marginBottom: 6 }}>
                         Get into my phone
@@ -350,11 +356,14 @@ const CameraScannerScreen = () => {
                         Scan the QR code below from your second device's camera to transfer the navigation map session.
                     </Text>
 
-                    <Image
+                    {/* <Image
                         source={{ uri: `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrValue)}` }}
                         style={{ width: 220, height: 220, marginBottom: 15 }}
                         resizeMode="contain"
-                    />
+                    /> */}
+                     <QRCode value={qrValue} size={200}
+        backgroundColor="white"
+        color="black"/>
 
                     <Text style={{ fontSize: 12, color: '#888888', marginBottom: 5 }}>
                         Link: {qrValue}

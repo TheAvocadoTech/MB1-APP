@@ -6,7 +6,9 @@ import { store } from '../store/store';
 import { APP_FLAVOR } from '../config/flavor';
 import { Alert } from 'react-native';
 
+// export const BASE_URL = APP_FLAVOR === 'MB1' ? 'http://192.168.1.70:7000' : 'https://api.avocadotech.in';
 export const BASE_URL = APP_FLAVOR === 'MB1' ? 'http://192.168.20.10:7000' : 'https://api.avocadotech.in/';
+
 
 const api = axios.create({
     baseURL: BASE_URL,
@@ -14,7 +16,7 @@ const api = axios.create({
     headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
-       'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36',
+      
     },
 });
 
@@ -141,16 +143,11 @@ export const deleteData = async (endpoint: string) => {
 
 export const scanQRToken = async (token: string) => {
     try {
+        const endpont=APP_FLAVOR==='MB1'?`/api/rfid/live-token/${encodeURIComponent(token)}`:`/api/IDVisitor/visitors/scan/${encodeURIComponent(token)}`;
         // GET /api/rfid/live-token/:token
-        const response = await api.get(
-            `/api/rfid/live-token/${encodeURIComponent(token)}`
-        );
+        const response = await api.get(endpont);
 
-        // Show successful API response details on screen
-        Alert.alert(
-            'API Success',
-            `URL: ${response.config?.baseURL}${response.config?.url}\n\nResponse:\n${JSON.stringify(response.data, null, 2)}`
-        );
+      
 
         return response.data;
 
@@ -172,11 +169,7 @@ export const scanQRToken = async (token: string) => {
             : 'No response body returned from server';
 
         // Show error details on screen in Release APK
-        Alert.alert(
-            'API Error Debug',
-            `Full Target URL:\n${baseUrl}${requestUrl}\n\nStatus Code:\n${statusCode}\n\nError Message:\n${errorMessage}\n\nResponse Data:\n${responseData}`
-        );
-
+       
         throw error;
     }
 };
@@ -208,7 +201,19 @@ export const fetchVisitorDashboard = async (token: string) => {
         throw error;
     }
 };
-
+export const getWayfindingPath=async (mapId: string) => {
+    try {
+        const response = await api.get(`/api/IDVisitor/maps/${mapId}/wayfinding`);
+        console.log("This is fetch  waypointd response ===>", response)
+        return response.data;
+    } catch (error) {
+        console.log("This is error>>>", error)
+        if (axios.isAxiosError(error) && error.response) {
+            return error.response.data;
+        }
+        throw error;
+    }
+};
 export const fetchCabinetsList = async (idNumber: string) => {
     try {
         const response = await api.get('/api/cabinet/', {
@@ -292,7 +297,7 @@ export const fetchVisitorLocation = async (visitorId: string) => {
             targetId = "6a624b4560e3cc3ce7496ccd";
         }
 
-        console.log("This is location url  >>", `${BASE_URL}api/IDVisitor/visitors/${targetId}/location?includePath=true`);
+        console.log("This is location url  >>", `${BASE_URL}/api/IDVisitor/visitors/${targetId}/location?includePath=true`);
         
         const response = await publicApi.get(`/api/IDVisitor/visitors/${targetId}/location?includePath=true`);
         console.log("This is fetch visitor location response ===>", response);
@@ -335,7 +340,7 @@ export const updateVisitorCabinet = async (visitorId: string, idNumber: string) 
 
 export const getMapDetails = async (mapId: string) => {
     try {
-        const response = await api.get(`/api/maps/${mapId}`);
+        const response = await api.get(`/api/IDVisitor/maps/${mapId}`);
         return response.data;
     } catch (error: any) {
         console.warn("Map details API notice:", error.message);
@@ -346,9 +351,9 @@ export const getMapDetails = async (mapId: string) => {
 export const getNavigationRoute = async (mapId: string, fromX: number, fromY: number, toX: number, toY: number) => {
     try {
       
-        console.log(`${BASE_URL}/api/maps/${mapId}/route?fromX=${fromX}&fromY=${fromY}&toX=${toX}&toY=${toY}`);
+        console.log(`${BASE_URL}/api/IDVisitor/maps/${mapId}/route?fromX=${fromX}&fromY=${fromY}&toX=${toX}&toY=${toY}`);
         const response = await api.get(
-            `/api/maps/${mapId}/route?fromX=${fromX}&fromY=${fromY}&toX=${toX}&toY=${toY}`
+            `/api/IDVisitor/maps/${mapId}/route?fromX=${fromX}&fromY=${fromY}&toX=${toX}&toY=${toY}`
         );
         return response.data;
     } catch (error: any) {
@@ -356,6 +361,19 @@ export const getNavigationRoute = async (mapId: string, fromX: number, fromY: nu
         return null;
     }
 };
+// export const getNavigationRoute=async(mapId:string)=>{
+//       try {
+      
+//         console.log(`${BASE_URL}/api/IDVisitor/maps/:mapId/route`);
+//         const response = await api.get(
+//             `/api/IDVisitor/maps/${mapId}/route`
+//         );
+//         return response.data;
+//     } catch (error: any) {
+//         console.warn("Navigation route API notice:", error.message);
+//         return null;
+//     }
+// } 
 export const getLive3DPositionByToken = async (
   token: string,
 ) => {

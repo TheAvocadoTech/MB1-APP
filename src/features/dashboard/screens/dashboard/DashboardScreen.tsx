@@ -56,7 +56,7 @@ const DashboardScreen = () => {
             // Safely extract visitor ID (handle cases where it might be _id or nested in data)
             const vis = visitor as any;
             const visId = visitor?.id || vis?._id || vis?.visitor?.id || '6a61054d9407ddaf4317ed64';
-            const idNumber = 'Tag1';
+            const idNumber = 'Tag1'; 
             
             console.log('Updating visitor assigned cabinet on backend via PUT for visitor:', visId);
             const putRes = await updateVisitorCabinet(visId, idNumber);

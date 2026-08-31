@@ -1,22 +1,56 @@
-import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { View, StyleSheet, Image, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { Suspense, useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { View, StyleSheet, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Canvas, useFrame, useThree } from '@react-three/fiber/native';
 import { useGLTF, OrbitControls } from '@react-three/drei/native';
-import { DoubleSide, Mesh, MeshBasicMaterial, Vector3 } from 'three';
+import { DoubleSide, Mesh, MeshBasicMaterial, Vector3, RingGeometry, CircleGeometry } from 'three';
+import { Asset } from 'expo-asset';
 
 import { FlatPathLayer, pctToWorld } from './FlatPathLayer';
 import defaultReaders from '../../config/rfidReaders.json';
 import transform from '../../config/mapConfig.json';
 
 const MB1_CAMPUS_GLB = require('../../assets/models/mb1-campus.glb');
-const resolvedAsset = Image.resolveAssetSource(MB1_CAMPUS_GLB);
 
-// Pre-fetches GLTF into cache before canvas renders
-useGLTF.preload(resolvedAsset.uri);
+// Static Geometries to avoid garbage collection spikes during touch events
+const RING_GEO_1 = new RingGeometry(0.18, 0.22, 16);
+const CIRCLE_GEO = new CircleGeometry(0.14, 16);
+const READER_GEO = new CircleGeometry(0.12, 12);
+const READER_MAT = new MeshBasicMaterial({ color: '#64748b', transparent: true, opacity: 0.5, side: DoubleSide });
 
-// ---------------------------------------------------------------------------
-// 1. Loading Indicator Component
-// ---------------------------------------------------------------------------
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error?: Error;
+}
+
+class MapErrorBoundary extends React.Component<{ children: React.ReactNode }, ErrorBoundaryState> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('3D Map Release Crash Captured:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorTitle}>Failed to load 3D Map</Text>
+          <Text style={styles.errorSubtext}>
+            {this.state.error?.message || 'Unable to render 3D canvas environment.'}
+          </Text>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const MapLoadingUI = () => (
   <View style={styles.loadingOverlay} pointerEvents="none">
     <ActivityIndicator size="large" color="#0ea5e9" />
@@ -24,35 +58,45 @@ const MapLoadingUI = () => (
   </View>
 );
 
-// Helper component that notifies parent when GLTF finishes mounting inside Suspense
-const ModelLoaderNotifier = ({ onLoad }: { onLoad: () => void }) => {
+const ModelLoaderNotifier = ({ scene, onLoad }: { scene: any; onLoad: () => void }) => {
+  const { gl, camera } = useThree();
+
   useEffect(() => {
-    onLoad();
-  }, [onLoad]);
+    if (scene) {
+      gl.compile(scene, camera);
+      onLoad();
+    }
+  }, [scene, gl, camera, onLoad]);
+
   return null;
 };
 
-// ---------------------------------------------------------------------------
-// 2. Optimized Model Component
-// ---------------------------------------------------------------------------
-const FacilityModel = ({ liveTransform }: { liveTransform?: any }) => {
-  const { scene } = useGLTF(resolvedAsset.uri);
+const FacilityModel = React.memo(({
+  modelUri,
+  liveTransform,
+  onLoaded,
+}: {
+  modelUri: string;
+  liveTransform?: any;
+  onLoaded: () => void;
+}) => {
+  const { scene } = useGLTF(modelUri);
   const t = liveTransform || transform;
 
   return (
-    <primitive
-      object={scene}
-      position={[t.position.x, t.position.y, t.position.z]}
-      rotation={[0, t.rotationY, 0]}
-      scale={t.scale}
-    />
+    <>
+      <primitive
+        object={scene}
+        position={[t.position.x, t.position.y, t.position.z]}
+        rotation={[0, t.rotationY, 0]}
+        scale={t.scale}
+      />
+      <ModelLoaderNotifier scene={scene} onLoad={onLoaded} />
+    </>
   );
-};
+});
 
-// ---------------------------------------------------------------------------
-// 3. Static Readers Markers
-// ---------------------------------------------------------------------------
-const AllReadersMarkers = ({
+const AllReadersMarkers = React.memo(({
   allReaders,
   nextCoords,
 }: {
@@ -75,19 +119,13 @@ const AllReadersMarkers = ({
   return (
     <group>
       {markers.map((m) => (
-        <mesh key={m.key} position={m.position} rotation={[-Math.PI / 2, 0, 0]}>
-          <circleGeometry args={[0.12, 16]} />
-          <meshBasicMaterial color="#64748b" transparent opacity={0.5} side={DoubleSide} />
-        </mesh>
+        <mesh key={m.key} position={m.position} rotation={[-Math.PI / 2, 0, 0]} geometry={READER_GEO} material={READER_MAT} />
       ))}
     </group>
   );
-};
+});
 
-// ---------------------------------------------------------------------------
-// 4. Pulsing Ring Target
-// ---------------------------------------------------------------------------
-const NextLocationRing = ({ coords }: { coords?: { x: number; y: number } | null }) => {
+const NextLocationRing = React.memo(({ coords }: { coords?: { x: number; y: number } | null }) => {
   const meshRef1 = useRef<Mesh>(null);
   const materialRef1 = useRef<MeshBasicMaterial>(null);
   const meshRef2 = useRef<Mesh>(null);
@@ -127,27 +165,22 @@ const NextLocationRing = ({ coords }: { coords?: { x: number; y: number } | null
 
   return (
     <group position={positionTuple} rotation={[-Math.PI / 2, 0, 0]}>
-      <mesh ref={meshRef1}>
-        <ringGeometry args={[0.18, 0.22, 24]} />
+      <mesh ref={meshRef1} geometry={RING_GEO_1}>
         <meshBasicMaterial ref={materialRef1} color="#84cc16" transparent side={DoubleSide} depthTest={false} />
+        
       </mesh>
 
-      <mesh ref={meshRef2}>
-        <ringGeometry args={[0.18, 0.22, 24]} />
+      <mesh ref={meshRef2} geometry={RING_GEO_1}>
         <meshBasicMaterial ref={materialRef2} color="#84cc16" transparent side={DoubleSide} depthTest={false} />
       </mesh>
 
-      <mesh position={[0, 0, 0.001]}>
-        <circleGeometry args={[0.14, 24]} />
+      <mesh position={[0, 0, 0.001]} geometry={CIRCLE_GEO}>
         <meshBasicMaterial color="#84cc16" transparent opacity={0.9} side={DoubleSide} depthTest={false} />
       </mesh>
     </group>
   );
-};
+});
 
-// ---------------------------------------------------------------------------
-// 5. Horizontally Offscreen Left Shift Controller
-// ---------------------------------------------------------------------------
 function NavigationCameraController({
   currentCoords,
   isManualCamera,
@@ -168,13 +201,9 @@ function NavigationCameraController({
   const isManualRef = useRef(isManualCamera);
   const lastCoordsRef = useRef<{ x: number; y: number } | null>(null);
 
-  // Overhead elevation distance
   const OVERHEAD_HEIGHT = 80;
-
-  // HORIZONTAL SHIFT: Increase this number to shift the map further to the LEFT
   const X_OFFSET = 12;
 
-  // Orient top-vector for proper map axis alignment
   useEffect(() => {
     camera.up.set(0, 0, -1);
     camera.updateProjectionMatrix();
@@ -188,16 +217,18 @@ function NavigationCameraController({
     const controls = controlsRef.current;
     if (!controls) return;
 
+    // Gesture tracking without setting React state on touch start
     const handleStart = () => {
       isInteracting.current = true;
       if (!isManualRef.current) {
         isManualRef.current = true;
-        setIsManualCamera(true);
       }
     };
 
     const handleEnd = () => {
       isInteracting.current = false;
+      // Delay state sync until gesture completes to keep touch fluid
+      setIsManualCamera(true);
     };
 
     controls.addEventListener('start', handleStart);
@@ -279,10 +310,11 @@ function NavigationCameraController({
     <OrbitControls
       ref={controlsRef}
       makeDefault
-      enableDamping={false}
-      rotateSpeed={1.5}
-      panSpeed={2.2}
-      zoomSpeed={1.5}
+      enableDamping={true}
+      dampingFactor={0.05}
+      rotateSpeed={0.8}
+      panSpeed={1.2}
+      zoomSpeed={1.0}
       enablePan={true}
       screenSpacePanning={true}
       minDistance={2}
@@ -291,9 +323,6 @@ function NavigationCameraController({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main Component
-// ---------------------------------------------------------------------------
 export const MB1Native3DMap = ({
   liveData,
   liveTransform,
@@ -317,9 +346,33 @@ export const MB1Native3DMap = ({
   const currentCoords = currentReader?.coords;
   const nextCoords = remainingReaders.length > 1 ? remainingReaders[1]?.coords : null;
 
+  const [localUri, setLocalUri] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isManualCamera, setIsManualCamera] = useState(false);
   const [recenterTrigger, setRecenterTrigger] = useState(0);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function prepareAsset() {
+      try {
+        const asset = Asset.fromModule(MB1_CAMPUS_GLB);
+        await asset.downloadAsync();
+        if (isMounted) {
+          setLocalUri(asset.localUri || asset.uri);
+        }
+      } catch (err) {
+        console.error('Failed to unpack asset:', err);
+      }
+    }
+    prepareAsset();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleLoaded = useCallback(() => {
+    setIsLoading(false);
+  }, []);
 
   const handleRecenter = () => {
     setIsManualCamera(false);
@@ -327,45 +380,56 @@ export const MB1Native3DMap = ({
   };
 
   return (
-    <View style={styles.container}>
-      {/* Show Loading Indicator until Suspense resolves */}
-      {isLoading && <MapLoadingUI />}
+    <MapErrorBoundary>
+      <View style={styles.container}>
+        {isLoading && <MapLoadingUI />}
 
-      <Canvas
-        gl={{ powerPreference: 'high-performance', antialias: false }}
-        camera={{
-          position: [12, 80, 0], // Initial camera position shifted right to pull UI left
-          fov: 45,
-          near: 0.1,
-          far: 10000,
-        }}>
-        <ambientLight intensity={0.9} />
-        <directionalLight position={[0, 80, 0]} intensity={1.2} />
+        {localUri && (
+          <Canvas
+            gl={{ 
+              powerPreference: 'high-performance', 
+              antialias: false,
+              precision: 'lowp',
+              logarithmicDepthBuffer: false,
+            }}
+            frameloop="always"
+            camera={{
+              position: [12, 80, 0],
+              fov: 45,
+              near: 0.1,
+              far: 10000,
+            }}>
+            <ambientLight intensity={0.9} />
+            <directionalLight position={[0, 80, 0]} intensity={1.2} />
 
-        <Suspense fallback={null}>
-          <FacilityModel liveTransform={liveTransform} />
-          <ModelLoaderNotifier onLoad={() => setIsLoading(false)} />
-          <FlatPathLayer liveData={liveData} />
+            <Suspense fallback={null}>
+              <FacilityModel
+                modelUri={localUri}
+                liveTransform={liveTransform}
+                onLoaded={handleLoaded}
+              />
+              <FlatPathLayer liveData={liveData} />
 
-          <AllReadersMarkers allReaders={allReaders} nextCoords={nextCoords} />
-          <NextLocationRing coords={nextCoords} />
+              <AllReadersMarkers allReaders={allReaders} nextCoords={nextCoords} />
+              <NextLocationRing coords={nextCoords} />
 
-          <NavigationCameraController
-            currentCoords={currentCoords}
-            isManualCamera={isManualCamera}
-            setIsManualCamera={setIsManualCamera}
-            recenterTrigger={recenterTrigger}
-          />
-        </Suspense>
-      </Canvas>
+              <NavigationCameraController
+                currentCoords={currentCoords}
+                isManualCamera={isManualCamera}
+                setIsManualCamera={setIsManualCamera}
+                recenterTrigger={recenterTrigger}
+              />
+            </Suspense>
+          </Canvas>
+        )}
 
-      {/* Recenter Button */}
-      {isManualCamera && !isLoading && (
-        <TouchableOpacity style={styles.recenterButton} onPress={handleRecenter}>
-          <Text style={styles.recenterText}>Recenter</Text>
-        </TouchableOpacity>
-      )}
-    </View>
+        {isManualCamera && !isLoading && (
+          <TouchableOpacity style={styles.recenterButton} onPress={handleRecenter}>
+            <Text style={styles.recenterText}>Recenter</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </MapErrorBoundary>
   );
 };
 
@@ -405,5 +469,23 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 13,
     fontWeight: '700',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    padding: 20,
+  },
+  errorTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#ef4444',
+  },
+  errorSubtext: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#64748b',
+    textAlign: 'center',
   },
 });

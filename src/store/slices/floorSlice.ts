@@ -1,8 +1,56 @@
 // src/store/floorSlice.js
 import { createSlice } from "@reduxjs/toolkit";
+type FloorMapData = {
+  mapMeta: null;
+  wayfindingData: null;
+};
+type Floor={
+    activeFloor:"GR"|"F1",
+   visitorInfo: any;
+  visitorPos: any;
+  targetPos: any;
 
-const initialState = {
-  activeFloor: "GR",
+  mapMeta: any;
+  wayfindingData: any;
+
+  floorMapData: {
+    GR: FloorMapData;
+    F1: FloorMapData;
+  };
+
+  activeRoute: any;
+  routeQueue: any[];
+  stableRoute: any;
+  pendingRoute: any;
+
+  routeMatchCount: number;
+  lastPathPos: any;
+  minPathMovementMeters: number;
+
+  distance: null;
+  proximity: string;
+   assets: never[];
+
+  apCache: Record<string, unknown>;
+  activeApMac: any;
+
+  locationQueue: never[];
+  queueCapacity: number;
+  rssiThreshold: number;
+
+  bleSignal: {
+    rssi: any;
+    raw_rssi: any;
+    beam: any;
+    ap_mac: any;
+    last_seen: any;
+    queueSize: number;
+    queueCapacity: number;
+    rssiThreshold: number;
+  };
+}
+const initialState:Floor = {
+  activeFloor:"GR",
   visitorInfo: null,
   visitorPos: null,
   targetPos: null,
@@ -53,7 +101,7 @@ export const floorSlice = createSlice({
       }
     },
 
-    setQueueCapacity: (state, action) => {
+    setQueueCapacity: (state:any, action) => {
       const capacity = Number(action.payload);
       if (!isNaN(capacity) && capacity >= 5 && capacity <= 80) {
         state.queueCapacity = capacity;
@@ -70,16 +118,25 @@ export const floorSlice = createSlice({
       }
     },
 
-    setFloorMapDetails: (state:any, action) => {
-      const { floor, mapMeta, wayfindingData } = action.payload;
-      if (floor) {
-        state.floorMapData[floor] = { mapMeta, wayfindingData };
-        if (state.activeFloor === floor) {
-          state.mapMeta = mapMeta || null;
-          state.wayfindingData = wayfindingData || null;
-        }
-      }
-    },
+   // store/slices/floorSlice.ts
+// store/slices/floorSlice.ts
+setFloorMapDetails: (state, action) => {
+  const { floor, mapMeta, wayfindingData, visitorPos, targetPos } = action.payload;
+
+  state.activeFloor = floor;
+  state.mapMeta = mapMeta;
+  state.wayfindingData = wayfindingData;
+  state.visitorPos = visitorPos;
+  state.targetPos = targetPos;
+  const floorKey = floor as keyof typeof state.floorMapData;
+
+  if (state.floorMapData[floorKey]) {
+    state.floorMapData[floorKey] = {
+      mapMeta,
+      wayfindingData,
+    };
+  }
+},
 
     updateLiveLocation: (state:any, action) => {
       const payload = action.payload;

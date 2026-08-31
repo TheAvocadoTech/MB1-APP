@@ -46,6 +46,7 @@ export const getVisitorLocation = createAsyncThunk(
     }
 );
 
+
 interface CabinetState {
     cabinetDetails: any | null;
     visitorAssignedCabinet: any | null;

@@ -1,19 +1,19 @@
-const { getDefaultConfig } = require('expo/metro-config');
-const { mergeConfig } = require('@react-native/metro-config');
+const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config');
 
-/**
- * Metro configuration
- * https://reactnative.dev/docs/metro
- *
- * @type {import('@react-native/metro-config').MetroConfig}
- */
 const defaultConfig = getDefaultConfig(__dirname);
-const { assetExts } = defaultConfig.resolver;
+const { assetExts, sourceExts } = defaultConfig.resolver;
 
-const config = {
+module.exports = mergeConfig(defaultConfig, {
   resolver: {
+    // Add 3D asset extensions to assetExts
     assetExts: [...assetExts, 'glb', 'gltf'],
   },
-};
-
-module.exports = mergeConfig(defaultConfig, config);
+  transformer: {
+    minifierConfig: {
+      keep_fnames: true,
+      mangle: {
+        keep_fnames: true,
+      },
+    },
+  },
+});

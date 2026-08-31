@@ -1,4 +1,7 @@
 {
   "name": "Equinix",
-  "displayName": "Equinix"
+  "displayName": "Equinix",
+  "plugins": [
+    "expo-asset"
+  ]
 }
