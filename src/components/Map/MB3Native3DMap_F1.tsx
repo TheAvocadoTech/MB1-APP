@@ -1,6 +1,7 @@
 import React, {
   Suspense,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
   useCallback,
@@ -17,17 +18,14 @@ import {
 import {
   Canvas,
   useFrame,
-  useThree,
 } from '@react-three/fiber/native';
 
 import {
   useGLTF,
   OrbitControls,
-  Line,
 } from '@react-three/drei/native';
 
 import {
-  Box3,
   Vector3,
   CatmullRomCurve3,
   DoubleSide,
@@ -35,6 +33,11 @@ import {
   MeshBasicMaterial,
   RingGeometry,
   CircleGeometry,
+  SphereGeometry,
+  BufferGeometry,
+  LineSegments,
+  Float32BufferAttribute,
+  Box3,
   TOUCH,
 } from 'three';
 import type { GLTF } from 'three-stdlib';
@@ -45,14 +48,30 @@ import { FLOOR_MAP_IDS } from '../../constants/constants';
 
 const MB3_F1 = require('../../assets/models/1st-floor.glb');
 
-// Pre-instantiated geometries matching optimization patterns
-const NODE_RING_GEO = new RingGeometry(0.3, 0.45, 16);
-const NODE_CIRCLE_GEO = new CircleGeometry(0.25, 16);
+// Model calibration setup
+const F1_CALIBRATION = {
+  posX: -9.5,  
+  posY: 0.0,   
+  posZ: -38.0, // Base vertical alignment preserved
+  scaleX: 1.0, 
+  scaleY: 1.0, 
+  scaleZ: 1.0,
+};
+
+// Independent offsets ONLY for nodes/paths
+const NODE_OFFSET_X = 0.0;  // Horizontal shift (+ to move right, - to move left)
+const NODE_OFFSET_Z = -5.0; // Forward/Backward shift (Make more negative to push FORWARD)
+
+// Map dimension & pixel-per-meter defaults
+const DEFAULT_MAP_META = {
+  width_m: 127.81,
+  height_m: 102.25,
+  ppm: 50.07391564392213,
+};
+
 const MARKER_RING_GEO = new RingGeometry(0.8, 1.2, 32);
 const MARKER_CIRCLE_GEO = new CircleGeometry(0.6, 32);
-
-const NODE_OUTER_MAT = new MeshBasicMaterial({ color: '#0ea5e9', transparent: true, opacity: 0.8, side: DoubleSide });
-const NODE_INNER_MAT = new MeshBasicMaterial({ color: '#0ea5e9', side: DoubleSide });
+const NODE_SPHERE_GEO = new SphereGeometry(0.35, 12, 12);
 
 const MapLoadingUI = () => (
   <View style={styles.loadingOverlay} pointerEvents="none">
@@ -61,41 +80,74 @@ const MapLoadingUI = () => (
   </View>
 );
 
-export interface ModelMapTransform {
-  minX: number;
-  maxX: number;
-  minZ: number;
-  maxZ: number;
-  width: number;
-  depth: number;
-  floorY: number;
-  offsetX?: number;
-  offsetZ?: number;
-}
-
-function project2Dto3DTuple(
-  x: number,
-  y: number,
-  mapWidth: number,
-  mapHeight: number,
-  transform?: ModelMapTransform | null,
-  elevationOffset = 0.3
+/**
+ * Maps 2D pixel space directly into 3D world space aligned with GLTF Model
+ */
+function mapTo3D(
+  pixelX: number,
+  pixelY: number,
+  mapMeta: any,
+  elevationY = 0.5
 ): [number, number, number] {
-  if (!transform || !mapWidth || !mapHeight) return [0, elevationOffset, 0];
+  const ppm = mapMeta?.ppm || DEFAULT_MAP_META.ppm;
+  const widthMeters = mapMeta?.width_m || DEFAULT_MAP_META.width_m;
+  const heightMeters = mapMeta?.height_m || DEFAULT_MAP_META.height_m;
 
-  const normX = x / mapWidth;
-  const normY = y / mapHeight;
+  // 1. Convert pixel coordinates to meter space centered at origin (0,0)
+  const rawX3D = (Number(pixelX) / ppm) - (widthMeters / 2);
+  const rawZ3D = (Number(pixelY) / ppm) - (heightMeters / 2);
 
-  const shiftRight = transform.offsetX ?? 2.5;
-  const shiftForward = transform.offsetZ ?? -8.5;
+  // 2. Apply model base position AND independent node offsets
+  const calibratedX = (rawX3D * F1_CALIBRATION.scaleX) + F1_CALIBRATION.posX + NODE_OFFSET_X;
+  const calibratedZ = (rawZ3D * F1_CALIBRATION.scaleZ) + F1_CALIBRATION.posZ + NODE_OFFSET_Z;
+  const calibratedY = elevationY * F1_CALIBRATION.scaleY;
 
-  const worldX = transform.minX + normX * transform.width + shiftRight;
-  const worldZ = transform.minZ + normY * transform.depth + shiftForward;
-  const worldY = transform.floorY + elevationOffset;
-
-  return [worldX, worldY, worldZ];
+  return [calibratedX, calibratedY, calibratedZ];
 }
 
+/**
+ * Universal Node Lookup
+ */
+function findWayfindingNode(nodesList: any[], targetId: string | number) {
+  if (!nodesList) return null;
+  const list = Array.isArray(nodesList) ? nodesList : Object.values(nodesList);
+  const targetStr = String(targetId).trim().toUpperCase();
+  const numOnly = targetStr.replace(/[^0-9]/g, '');
+
+  let found = list.find((n) => {
+    if (!n) return false;
+    const name = String(n.name || n.id || '').trim().toUpperCase();
+    return (
+      name === targetStr ||
+      name === `N${numOnly}` ||
+      name === numOnly ||
+      name === `NODE ${numOnly}` ||
+      name === `NODE_${numOnly}` ||
+      name === `NODE${numOnly}`
+    );
+  });
+  if (found) return found;
+
+  if (numOnly) {
+    const regex = new RegExp(`(^|[^0-9])0*${numOnly}([^0-9]|$)`, 'i');
+    found = list.find((n) => {
+      const name = String(n?.name || n?.id || '');
+      return regex.test(name);
+    });
+    if (found) return found;
+
+    const idx = parseInt(numOnly, 10) - 1;
+    if (idx >= 0 && idx < list.length) {
+      return list[idx];
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Dijkstra Path Computation
+ */
 function calculateDijkstraPath(
   nodesList: any[],
   edgesMap: Record<string, any>,
@@ -135,7 +187,6 @@ function calculateDijkstraPath(
   list.forEach((n) => {
     const name = String(n.name || n.id);
     distances[name] = Infinity;
-    previous[name] = null;
     unvisited.add(name);
   });
 
@@ -168,24 +219,18 @@ function calculateDijkstraPath(
       const neighborName =
         typeof neighborKey === 'string' ? neighborKey : neighborKey?.name;
       if (neighborName && unvisited.has(neighborName)) {
-        const neighborNode = list.find(
-          (n) => String(n.name || n.id) === neighborName
-        );
-        const currentNode = list.find(
-          (n) => String(n.name || n.id) === current
-        );
+        const neighborNode = list.find((n) => String(n.name || n.id) === neighborName);
+        const currentNode = list.find((n) => String(n.name || n.id) === current);
         let weight = 1;
         if (currentNode && neighborNode) {
           const p1 = currentNode.position || currentNode;
           const p2 = neighborNode.position || neighborNode;
           weight = Math.hypot(p1.x - p2.x, p1.y - p2.y);
         }
-        if (current) {
-          const alt = distances[current] + weight;
-          if (alt < distances[neighborName]) {
-            distances[neighborName] = alt;
-            previous[neighborName] = current;
-          }
+        const alt = distances[current!] + weight;
+        if (alt < distances[neighborName]) {
+          distances[neighborName] = alt;
+          previous[neighborName] = current;
         }
       }
     });
@@ -193,6 +238,7 @@ function calculateDijkstraPath(
 
   const pathNodes: Array<{ x: number; y: number; name?: string }> = [];
   let curr: string | null = endName;
+
   while (curr) {
     const nodeObj = list.find((n) => String(n.name || n.id) === curr);
     if (nodeObj) {
@@ -222,170 +268,106 @@ function calculateDijkstraPath(
   return [...pathNodes, { x: endPos.x, y: endPos.y }];
 }
 
-// GraphNodesLayer renders node rings and blue dotted edges between graph connections
-export const GraphNodesLayer = React.memo(({
-  wayfindingData,
-  transform,
+/**
+ * Overlay component for graph nodes and connecting network edges
+ */
+const GraphDebugOverlay = React.memo(({
+  graphNodes,
+  graphEdges,
   mapMeta,
 }: {
-  wayfindingData?: any;
-  transform?: ModelMapTransform | null;
-  mapMeta?: any;
+  graphNodes: any[];
+  graphEdges: Record<string, any>;
+  mapMeta: any;
 }) => {
-  const mapWidth = mapMeta?.width || wayfindingData?.map?.width || 6400;
-  const mapHeight = mapMeta?.height || wayfindingData?.map?.height || 5120;
-
-  const { nodes, edges } = useMemo(() => {
-    const rawNodes = wayfindingData?.nodes || wayfindingData?.wayfinding_path?.nodes || [];
-    let rawEdges = wayfindingData?.edges || wayfindingData?.wayfinding_path?.edges || {};
-
-    if (Object.keys(rawEdges).length === 0 && rawNodes.length > 0) {
-      const extracted: Record<string, any> = {};
-      rawNodes.forEach((n: any) => {
-        if (n.edges) extracted[n.name || n.id] = n.edges;
-      });
-      rawEdges = extracted;
-    }
-
-    return { nodes: rawNodes, edges: rawEdges };
-  }, [wayfindingData]);
-
-  const { nodePositionsMap, nodePositionsList } = useMemo(() => {
-    if (!transform) return { nodePositionsMap: new Map<string, [number, number, number]>(), nodePositionsList: [] };
-
-    const map = new Map<string, [number, number, number]>();
-    const list: Array<{ id: string; pos: [number, number, number] }> = [];
-
-    nodes.forEach((node: any) => {
-      const pos = node.position || node;
-      if (pos && pos.x !== undefined && pos.y !== undefined) {
-        const id = String(node.name || node.id);
-        const coords = project2Dto3DTuple(
-          pos.x,
-          pos.y,
-          mapWidth,
-          mapHeight,
-          transform,
-          0.2
-        );
-        map.set(id, coords);
-        list.push({ id, pos: coords });
-      }
+  const parsedNodes = useMemo(() => {
+    return graphNodes.map((n) => {
+      const p = n.position || n;
+      const [wx, wy, wz] = mapTo3D(p.x, p.y, mapMeta, 0.5);
+      return {
+        id: String(n.name || n.id),
+        position: [wx, wy, wz] as [number, number, number],
+      };
     });
+  }, [graphNodes, mapMeta]);
 
-    return { nodePositionsMap: map, nodePositionsList: list };
-  }, [nodes, mapWidth, mapHeight, transform]);
+  const edgeLinesGeometry = useMemo(() => {
+    if (!graphNodes.length || !graphEdges) return null;
 
-  const edgeSegments = useMemo(() => {
-    if (!transform || nodePositionsMap.size === 0) return [];
+    const nodePosMap = new Map<string, [number, number, number]>();
+    parsedNodes.forEach((pn) => nodePosMap.set(pn.id, pn.position));
 
-    const segments: Array<{ key: string; start: [number, number, number]; end: [number, number, number] }> = [];
-    const drawnEdgePairs = new Set<string>();
+    const linePositions: number[] = [];
+    const drawnPairs = new Set<string>();
 
-    Object.entries(edges).forEach(([sourceName, targets]: [string, any]) => {
-      const p1 = nodePositionsMap.get(sourceName);
+    Object.entries(graphEdges).forEach(([sourceId, neighbors]) => {
+      const p1 = nodePosMap.get(String(sourceId));
       if (!p1) return;
 
-      const targetList = Array.isArray(targets)
-        ? targets
-        : Object.keys(targets || {});
+      const neighborList = Array.isArray(neighbors)
+        ? neighbors
+        : Object.keys(neighbors);
 
-      targetList.forEach((targetKey: any) => {
-        const targetName = String(typeof targetKey === 'string' ? targetKey : targetKey?.name);
-        const edgeKey = [sourceName, targetName].sort().join('<->');
-        if (drawnEdgePairs.has(edgeKey)) return;
-        drawnEdgePairs.add(edgeKey);
-
-        const p2 = nodePositionsMap.get(targetName);
+      neighborList.forEach((nKey: any) => {
+        const targetId = String(typeof nKey === 'string' ? nKey : nKey?.name || nKey?.id);
+        const p2 = nodePosMap.get(targetId);
         if (!p2) return;
 
-        segments.push({ key: edgeKey, start: p1, end: p2 });
+        const pairKey = [sourceId, targetId].sort().join('--');
+        if (drawnPairs.has(pairKey)) return;
+        drawnPairs.add(pairKey);
+
+        linePositions.push(p1[0], p1[1], p1[2]);
+        linePositions.push(p2[0], p2[1], p2[2]);
       });
     });
 
-    return segments;
-  }, [edges, nodePositionsMap, transform]);
+    if (linePositions.length === 0) return null;
 
-  if (!transform || nodePositionsList.length === 0) return null;
+    const geo = new BufferGeometry();
+    geo.setAttribute('position', new Float32BufferAttribute(linePositions, 3));
+    return geo;
+  }, [parsedNodes, graphEdges, graphNodes]);
 
   return (
-    <group>
-      {/* Blue Dotted Connections */}
-      {edgeSegments.map((edge) => (
-        <Line
-          key={`edge-${edge.key}`}
-          points={[edge.start, edge.end]}
-          color="#38bdf8"
-          lineWidth={2}
-          dashed={true}
-          dashSize={0.8}
-          gapSize={0.4}
-        />
+    <group key="graph-debug-overlay">
+      {/* Node Spheres */}
+      {parsedNodes.map((node) => (
+        <mesh
+          key={`node-${node.id}`}
+          position={node.position}
+          geometry={NODE_SPHERE_GEO}
+          frustumCulled={false}
+        >
+          <meshBasicMaterial color="#38bdf8" transparent opacity={0.65} />
+        </mesh>
       ))}
 
-      {/* Wayfinding Graph Nodes */}
-      {nodePositionsList.map((nodeItem) => (
-        <group
-          key={`node-marker-${nodeItem.id}`}
-          position={nodeItem.pos}
-          rotation={[-Math.PI / 2, 0, 0]}
-        >
-          <mesh frustumCulled={false} geometry={NODE_RING_GEO} material={NODE_OUTER_MAT} />
-          <mesh frustumCulled={false} position={[0, 0, 0.01]} geometry={NODE_CIRCLE_GEO} material={NODE_INNER_MAT} />
-        </group>
-      ))}
+      {/* Connected Line Edges */}
+      {edgeLinesGeometry && (
+        <lineSegments geometry={edgeLinesGeometry} frustumCulled={false}>
+          <lineBasicMaterial color="#0284c7" transparent opacity={0.4} linewidth={1} />
+        </lineSegments>
+      )}
     </group>
   );
 });
 
-function NavigationCameraController({
-  focusTarget,
-  controlsRef,
-}: {
-  focusTarget: [number, number, number];
-  controlsRef: any;
-}) {
-  const { camera } = useThree();
-
-  useEffect(() => {
-    camera.up.set(0, 0, -1);
-    camera.updateProjectionMatrix();
-  }, [camera]);
-
-  useEffect(() => {
-    if (controlsRef.current && (focusTarget[0] !== 0 || focusTarget[2] !== 0)) {
-      controlsRef.current.target.set(...focusTarget);
-      camera.position.set(focusTarget[0], focusTarget[1] + 120, focusTarget[2] - 140);
-      camera.lookAt(...focusTarget);
-      controlsRef.current.update();
-    }
-  }, [focusTarget, camera, controlsRef]);
-
-  return null;
-}
-
 export const Native3DPathLayer = React.memo(({
   visitorPos,
   targetPos,
-  transform,
   mapMeta,
   wayfindingData,
   onPositionsComputed,
-  onTurnInstructionCalculated,
 }: {
   visitorPos?: { x: number; y: number };
   targetPos?: { x: number; y: number };
-  transform?: ModelMapTransform | null;
   mapMeta?: any;
   wayfindingData?: any;
   onPositionsComputed?: (visitor: [number, number, number] | null, target: [number, number, number] | null) => void;
-  onTurnInstructionCalculated?: (instruction: any) => void;
 }) => {
   const pulseMeshRef = useRef<Mesh>(null);
   const pulseMatRef = useRef<MeshBasicMaterial>(null);
-
-  const mapWidth = mapMeta?.width || wayfindingData?.map?.width || 6400;
-  const mapHeight = mapMeta?.height || wayfindingData?.map?.height || 5120;
 
   const rawVisitor2D = useMemo(() => {
     if (visitorPos && typeof visitorPos.x === 'number' && typeof visitorPos.y === 'number') {
@@ -398,7 +380,7 @@ export const Native3DPathLayer = React.memo(({
     if (targetPos && typeof targetPos.x === 'number' && typeof targetPos.y === 'number') {
       return { x: targetPos.x, y: targetPos.y };
     }
-    return { x: 0, y: 0 };
+    return { x: 5525.298, y: 2491.837 };
   }, [targetPos]);
 
   const { graphNodes, graphEdges } = useMemo(() => {
@@ -408,7 +390,7 @@ export const Native3DPathLayer = React.memo(({
     if (Object.keys(edges).length === 0 && nodes.length > 0) {
       const extracted: Record<string, any> = {};
       nodes.forEach((n: any) => {
-        if (n.edges) extracted[n.name || n.id] = n.edges;
+        if (n.edges) extracted[String(n.name || n.id)] = n.edges;
       });
       edges = extracted;
     }
@@ -416,13 +398,8 @@ export const Native3DPathLayer = React.memo(({
     return { graphNodes: nodes, graphEdges: edges };
   }, [wayfindingData]);
 
-  // Dijkstra path between 2D visitor and target positions
   const rawPath2D = useMemo(() => {
-    if (
-      rawVisitor2D.x > 0 &&
-      rawTarget2D.x > 0 &&
-      graphNodes.length > 0
-    ) {
+    if (rawVisitor2D.x > 0 && rawTarget2D.x > 0 && graphNodes.length > 0) {
       return calculateDijkstraPath(graphNodes, graphEdges, rawVisitor2D, rawTarget2D);
     }
     return [];
@@ -430,13 +407,13 @@ export const Native3DPathLayer = React.memo(({
 
   const liveVisitorPos = useMemo<[number, number, number] | null>(() => {
     if (!rawVisitor2D.x && !rawVisitor2D.y) return null;
-    return project2Dto3DTuple(rawVisitor2D.x, rawVisitor2D.y, mapWidth, mapHeight, transform, 0.4);
-  }, [rawVisitor2D, mapWidth, mapHeight, transform]);
+    return mapTo3D(rawVisitor2D.x, rawVisitor2D.y, mapMeta, 0.6);
+  }, [rawVisitor2D, mapMeta]);
 
   const targetPosTuple = useMemo<[number, number, number] | null>(() => {
     if (!rawTarget2D.x && !rawTarget2D.y) return null;
-    return project2Dto3DTuple(rawTarget2D.x, rawTarget2D.y, mapWidth, mapHeight, transform, 0.4);
-  }, [rawTarget2D, mapWidth, mapHeight, transform]);
+    return mapTo3D(rawTarget2D.x, rawTarget2D.y, mapMeta, 0.6);
+  }, [rawTarget2D, mapMeta]);
 
   useEffect(() => {
     if (onPositionsComputed && liveVisitorPos && targetPosTuple) {
@@ -444,36 +421,29 @@ export const Native3DPathLayer = React.memo(({
     }
   }, [liveVisitorPos, targetPosTuple, onPositionsComputed]);
 
-  // Exact Core Logic from Reference Code
   const pathCurve = useMemo(() => {
-    if (!liveVisitorPos || !targetPosTuple || !transform) return null;
+    if (!liveVisitorPos || !targetPosTuple) return null;
 
-    const routePoints: Vector3[] = [];
+    const routePoints: Vector3[] = [new Vector3(...liveVisitorPos)];
 
-    // 1. Add current Live Visitor Position as the start point
-    routePoints.push(new Vector3(...liveVisitorPos));
-
-    // 2. Add intermediate Dijkstra waypoints projected to 3D space
     if (rawPath2D.length > 0) {
       rawPath2D.forEach((pt) => {
-        const [wx, wy, wz] = project2Dto3DTuple(pt.x, pt.y, mapWidth, mapHeight, transform, 0.4);
+        const [wx, wy, wz] = mapTo3D(pt.x, pt.y, mapMeta, 0.6);
         routePoints.push(new Vector3(wx, wy, wz));
       });
     }
 
-    // 3. Add Destination Target Position as the final point
     routePoints.push(new Vector3(...targetPosTuple));
 
-    // Remove overlapping/duplicate consecutive waypoints to avoid CatmullRom rendering artifacts
     const uniquePoints = routePoints.filter((point, index) => {
       if (index === 0) return true;
-      return point.distanceTo(routePoints[index - 1]) > 0.0001;
+      return point.distanceTo(routePoints[index - 1]) > 0.05;
     });
 
     if (uniquePoints.length < 2) return null;
 
-    return new CatmullRomCurve3(uniquePoints);
-  }, [liveVisitorPos, targetPosTuple, rawPath2D, transform, mapWidth, mapHeight]);
+    return new CatmullRomCurve3(uniquePoints, false, 'catmullrom', 0.1);
+  }, [liveVisitorPos, targetPosTuple, rawPath2D, mapMeta]);
 
   useFrame(({ clock }) => {
     const time = clock.getElapsedTime();
@@ -489,20 +459,29 @@ export const Native3DPathLayer = React.memo(({
   });
 
   return (
-    <group key={`path-layer-${mapWidth}-${mapHeight}`}>
+    <group key={`path-layer-f1`}>
+      {/* Node Graph Overlay & Connections */}
+      <GraphDebugOverlay
+        graphNodes={graphNodes}
+        graphEdges={graphEdges}
+        mapMeta={mapMeta}
+      />
+
+      {/* Calculated Wayfinding Tube Path */}
       {pathCurve && (
         <>
           <mesh frustumCulled={false}>
-            <tubeGeometry args={[pathCurve, 64, 0.1, 8, false]} />
+            <tubeGeometry args={[pathCurve, 128, 0.2, 8, false]} />
             <meshBasicMaterial color="#0046be" transparent={false} opacity={1.0} side={DoubleSide} />
           </mesh>
           <mesh frustumCulled={false}>
-            <tubeGeometry args={[pathCurve, 64, 0.2, 8, false]} />
+            <tubeGeometry args={[pathCurve, 128, 0.4, 8, false]} />
             <meshBasicMaterial color="#0284c7" transparent opacity={0.4} side={DoubleSide} />
           </mesh>
         </>
       )}
 
+      {/* Visitor Origin Marker */}
       {liveVisitorPos && (
         <group position={liveVisitorPos} rotation={[-Math.PI / 2, 0, 0]}>
           <mesh ref={pulseMeshRef} frustumCulled={false} geometry={MARKER_RING_GEO}>
@@ -514,6 +493,7 @@ export const Native3DPathLayer = React.memo(({
         </group>
       )}
 
+      {/* Target Destination Marker */}
       {targetPosTuple && (
         <group position={targetPosTuple} rotation={[-Math.PI / 2, 0, 0]}>
           <mesh frustumCulled={false} geometry={MARKER_RING_GEO}>
@@ -530,54 +510,30 @@ export const Native3DPathLayer = React.memo(({
 
 export const FacilityModel = ({
   modelUri,
-  onTransformReady,
 }: {
   modelUri: string;
-  onTransformReady: (transform: ModelMapTransform) => void;
 }) => {
   const gltf = useGLTF(modelUri) as GLTF;
   const { scene } = gltf;
 
-  const transform = useMemo(() => {
-    if (!scene) return null;
-
-    scene.updateMatrixWorld(true);
-    const boundingBox = new Box3().setFromObject(scene);
-    const center = new Vector3();
-    boundingBox.getCenter(center);
-
-    return {
-      minX: boundingBox.min.x - center.x,
-      maxX: boundingBox.max.x - center.x,
-      minZ: boundingBox.min.z - center.z,
-      maxZ: boundingBox.max.z - center.z,
-      width: boundingBox.max.x - boundingBox.min.x,
-      depth: boundingBox.max.z - boundingBox.min.z,
-      floorY: boundingBox.min.y - center.y,
-    };
-  }, [scene]);
-
-  useEffect(() => {
-    if (transform) {
-      onTransformReady(transform);
+  useLayoutEffect(() => {
+    if (scene) {
+      const box = new Box3().setFromObject(scene);
+      const center = box.getCenter(new Vector3());
+      scene.position.x = -center.x;
+      scene.position.y = -box.min.y;
+      scene.position.z = -center.z;
     }
-  }, [transform, onTransformReady]);
-
-  const clonedScene = useMemo(() => {
-    const cloned = scene.clone(true);
-    cloned.updateMatrixWorld(true);
-
-    const boundingBox = new Box3().setFromObject(cloned);
-    const center = new Vector3();
-    boundingBox.getCenter(center);
-
-    cloned.position.set(-center.x, -center.y, -center.z);
-    cloned.updateMatrixWorld(true);
-
-    return cloned;
   }, [scene]);
 
-  return <primitive object={clonedScene} scale={1} />;
+  return (
+    <group
+      position={[F1_CALIBRATION.posX, F1_CALIBRATION.posY, F1_CALIBRATION.posZ]}
+      scale={[F1_CALIBRATION.scaleX, F1_CALIBRATION.scaleY, F1_CALIBRATION.scaleZ]}
+    >
+      <primitive object={scene} />
+    </group>
+  );
 };
 
 const MapScene = ({
@@ -586,28 +542,15 @@ const MapScene = ({
   targetPos,
   mapMeta,
   wayfindingData,
-  onLoaded,
-  onInstructionUpdated,
 }: {
   modelUri: string;
   visitorPos: any;
   targetPos: any;
   mapMeta: any;
   wayfindingData: any;
-  onLoaded: () => void;
-  onInstructionUpdated: (instruction: any) => void;
 }) => {
-  const [modelTransform, setModelTransform] = useState<ModelMapTransform | null>(null);
   const [focusTarget, setFocusTarget] = useState<[number, number, number]>([0, 0, 0]);
   const controlsRef = useRef<any>(null);
-
-  const handleTransformReady = useCallback(
-    (transform: ModelMapTransform) => {
-      setModelTransform(transform);
-      onLoaded();
-    },
-    [onLoaded]
-  );
 
   const handlePositionsComputed = useCallback(
     (visitor: [number, number, number] | null, target: [number, number, number] | null) => {
@@ -629,35 +572,19 @@ const MapScene = ({
 
   return (
     <>
-      <ambientLight intensity={0.9} />
-      <directionalLight position={[0, 100, 0]} intensity={1.3} />
+      <ambientLight intensity={1.4} />
+      <directionalLight position={[50, 100, 50]} intensity={1.6} />
 
       <Suspense fallback={null}>
-        <FacilityModel
-          key={`facility-${modelUri}`}
-          modelUri={modelUri}
-          onTransformReady={handleTransformReady}
+        <FacilityModel modelUri={modelUri} />
+
+        <Native3DPathLayer
+          visitorPos={visitorPos}
+          targetPos={targetPos}
+          mapMeta={mapMeta}
+          wayfindingData={wayfindingData}
+          onPositionsComputed={handlePositionsComputed}
         />
-
-        {modelTransform && (
-          <>
-            <GraphNodesLayer
-              wayfindingData={wayfindingData}
-              transform={modelTransform}
-              mapMeta={mapMeta}
-            />
-
-            <Native3DPathLayer
-              visitorPos={visitorPos}
-              targetPos={targetPos}
-              transform={modelTransform}
-              mapMeta={mapMeta}
-              wayfindingData={wayfindingData}
-              onPositionsComputed={handlePositionsComputed}
-              onTurnInstructionCalculated={onInstructionUpdated}
-            />
-          </>
-        )}
       </Suspense>
 
       <OrbitControls
@@ -676,19 +603,16 @@ const MapScene = ({
           TWO: TOUCH.DOLLY_PAN,
         }}
       />
-
-      <NavigationCameraController focusTarget={focusTarget} controlsRef={controlsRef} />
     </>
   );
 };
 
 export const MB3Native3DMap_F1 = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [turnInstruction, setTurnInstruction] = useState<any>(null);
   const [localUri, setLocalUri] = useState<string | null>(null);
 
   const [wayfindingData, setWayfindingData] = useState<any>(null);
-  const [mapMeta, setMapMeta] = useState<any>(null);
+  const [mapMeta, setMapMeta] = useState<any>(DEFAULT_MAP_META);
   const [visitorPos, setVisitorPos] = useState<{ x: number; y: number } | null>(null);
   const [targetPos, setTargetPos] = useState<{ x: number; y: number } | null>(null);
 
@@ -736,30 +660,32 @@ export const MB3Native3DMap_F1 = () => {
             : null;
 
         const computedMapMeta = {
-          width: mapData?.width || mapData?.image_width || wfData?.map?.width || 6400,
-          height: mapData?.height || mapData?.image_height || wfData?.map?.height || 5120,
+          width_m: mapData?.width_m || DEFAULT_MAP_META.width_m,
+          height_m: mapData?.height_m || DEFAULT_MAP_META.height_m,
+          ppm: mapData?.ppm || DEFAULT_MAP_META.ppm,
         };
 
         const nodes = wfData?.nodes || wfData?.wayfinding_path?.nodes || [];
-        let calculatedVisitorPos = null;
-        let calculatedTargetPos = null;
 
-        if (Array.isArray(nodes) && nodes.length >= 2) {
-          const startNodePos = nodes[0].position || nodes[0];
-          const endNodePos = nodes[nodes.length - 1].position || nodes[nodes.length - 1];
+        const n48 = findWayfindingNode(nodes, '48');
+        const n45 = findWayfindingNode(nodes, '45');
+        let f1LiftPos = { x: 5004.59, y: 2313.4 };
 
-          if (startNodePos?.x !== undefined && startNodePos?.y !== undefined) {
-            calculatedVisitorPos = { x: Number(startNodePos.x), y: Number(startNodePos.y) };
-          }
-          if (endNodePos?.x !== undefined && endNodePos?.y !== undefined) {
-            calculatedTargetPos = { x: Number(endNodePos.x), y: Number(endNodePos.y) };
+        if (n48 && n45) {
+          const p1 = n48.position || n48;
+          const p2 = n45.position || n45;
+          if (p1?.x !== undefined && p2?.x !== undefined) {
+            f1LiftPos = {
+              x: (Number(p1.x) + Number(p2.x)) / 2,
+              y: (Number(p1.y) + Number(p2.y)) / 2,
+            };
           }
         }
 
         setMapMeta(computedMapMeta);
         setWayfindingData(wfData);
-        setVisitorPos(calculatedVisitorPos);
-        setTargetPos(calculatedTargetPos);
+        setVisitorPos(f1LiftPos);
+        setTargetPos({ x: 5525.298, y: 2491.837 });
       } catch (err: any) {
         console.warn('Map fetch error:', err.message);
       } finally {
@@ -774,37 +700,24 @@ export const MB3Native3DMap_F1 = () => {
     };
   }, []);
 
-  const handleLoaded = useCallback(() => {
-    setIsLoading(false);
-  }, []);
-
   return (
     <View style={styles.container}>
       {isLoading && <MapLoadingUI />}
 
-      {turnInstruction && (
-        <View style={styles.hudCard} pointerEvents="none">
-          <Text style={styles.hudTitle}>{turnInstruction.text}</Text>
-          <Text style={styles.hudSubtext}>{turnInstruction.subtext}</Text>
-        </View>
-      )}
-
       {localUri && (
         <Canvas
           camera={{
-            position: [0, 150, 0],
+            position: [0, 150, 50],
             fov: 45,
             near: 0.1,
             far: 100000,
           }}>
           <MapScene
             modelUri={localUri}
-            visitorPos={visitorPos}
-            targetPos={targetPos}
+            visitorPos={visitorPos || { x: 5004.59, y: 2313.4 }}
+            targetPos={targetPos || { x: 5525.298, y: 2491.837 }}
             mapMeta={mapMeta}
             wayfindingData={wayfindingData}
-            onLoaded={handleLoaded}
-            onInstructionUpdated={setTurnInstruction}
           />
         </Canvas>
       )}
@@ -832,26 +745,5 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#334155',
-  },
-  hudCard: {
-    position: 'absolute',
-    top: 20,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.9)',
-    borderRadius: 16,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    alignItems: 'center',
-    zIndex: 30,
-  },
-  hudTitle: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  hudSubtext: {
-    color: '#94a3b8',
-    fontSize: 12,
-    marginTop: 2,
   },
 });
