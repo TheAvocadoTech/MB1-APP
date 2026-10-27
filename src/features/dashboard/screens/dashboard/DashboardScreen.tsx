@@ -306,7 +306,7 @@ const DashboardScreen = () => {
                 </View>
                 {/* label container */}
                 <View style={styles.labelContainer}>
-                    <Text style={styles.labelRegular} varient='medium' >Kindly select the below cabinets belonging to  {visitor?.company || "Equinix"}</Text>
+                    <Text style={styles.labelRegular} varient='medium' >Kindly select the below cabinets belonging to  <Text style={styles.labelCompanyName} varient='medium'>{visitor?.company || "Equinix"}</Text></Text>
                 </View>
 
                 <View style={styles.rowContainer}>
@@ -332,7 +332,7 @@ const DashboardScreen = () => {
                     }
 
                 </View>
-
+  
                 {/* Spacer so content doesn't hide behind floating button */}
                 {selectedCabinet && <View style={{ height: 100 }} />}
 

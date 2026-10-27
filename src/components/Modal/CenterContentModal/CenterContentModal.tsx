@@ -55,10 +55,10 @@ const CenterContentModal: React.FC<CenterContentModalProps> = ({
                 >
                     {icon && (
                         <View style={styles.iconContainer}>
-                            <Image source={icon} />
+                            <Image source={icon} style={{height:40,width:40}}/>
                         </View>
                     )}
-
+                    
                     {title && (
                         <View style={styles.titleContainer}>
                             {typeof title === 'string' ? (

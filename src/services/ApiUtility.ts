@@ -6,8 +6,8 @@ import { store } from '../store/store';
 import { APP_FLAVOR } from '../config/flavor';
 import { Alert } from 'react-native';
 
-// export const BASE_URL = APP_FLAVOR === 'MB1' ? 'http://192.168.1.70:7000' : 'https://api.avocadotech.in';
-export const BASE_URL = APP_FLAVOR === 'MB1' ? 'http://192.168.20.10:7000' : 'https://api.avocadotech.in/';
+export const BASE_URL = APP_FLAVOR === 'MB1' ? 'http://192.168.1.70:7000' : 'https://api.avocadotech.in';
+// export const BASE_URL = APP_FLAVOR === 'MB1' ? 'http://192.168.20.10:7000' : 'https://api.avocadotech.in/';
 
 
 const api = axios.create({

@@ -318,8 +318,7 @@ function NavigationCameraController({
       enablePan={true}
       screenSpacePanning={true}
       minDistance={2}
-      maxDistance={200}
-    />
+      maxDistance={200} />
   );
 }
 
@@ -350,7 +349,8 @@ export const MB1Native3DMap = ({
   const [isLoading, setIsLoading] = useState(true);
   const [isManualCamera, setIsManualCamera] = useState(false);
   const [recenterTrigger, setRecenterTrigger] = useState(0);
-
+   const zoomHandlers = useRef<{ zoomIn?: () => void; zoomOut?: () => void }>({});
+ 
   useEffect(() => {
     let isMounted = true;
     async function prepareAsset() {
@@ -407,6 +407,7 @@ export const MB1Native3DMap = ({
                 modelUri={localUri}
                 liveTransform={liveTransform}
                 onLoaded={handleLoaded}
+                
               />
               <FlatPathLayer liveData={liveData} />
 
@@ -428,6 +429,20 @@ export const MB1Native3DMap = ({
             <Text style={styles.recenterText}>Recenter</Text>
           </TouchableOpacity>
         )}
+          <View style={styles.zoomHUD}>
+                <TouchableOpacity
+                  style={styles.zoomButton}
+                  onPress={() => zoomHandlers.current.zoomOut?.()}
+                >
+                  <Text style={styles.zoomText}>+</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.zoomButton}
+                  onPress={() => zoomHandlers.current.zoomIn?.()}
+                >
+                  <Text style={styles.zoomText}>-</Text>
+                </TouchableOpacity>
+              </View>
       </View>
     </MapErrorBoundary>
   );
@@ -487,5 +502,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#64748b',
     textAlign: 'center',
+  },
+   zoomHUD: {
+            position: 'absolute',
+            left: 16,
+            bottom: 24,
+            gap: 8,
+        },
+  zoomButton: {
+            width: 48,
+            height: 48,
+            borderRadius: 12,
+            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            elevation: 3,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.15,
+            shadowRadius: 3,
+        },
+  zoomText: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#0f172a',
   },
 });

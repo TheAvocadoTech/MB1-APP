@@ -8,8 +8,8 @@ export const useStyles = (colors: ColorsType) =>
             backgroundColor: colors.background_primary
         },
         contentContainer: {
-            paddingHorizontal: 32,
-            paddingVertical: 76
+            paddingHorizontal: 12,
+            paddingVertical: 56
         },
         header: {
             flexDirection: "row",
@@ -57,7 +57,15 @@ export const useStyles = (colors: ColorsType) =>
         labelRegular: {
             fontSize: 20,
             lineHeight: 40,
-            color: colors.subtitle
+            color: colors.subtitle,
+            
+        },
+         labelCompanyName: {
+            fontSize: 20,
+            lineHeight: 40,
+            color: colors.contentPrimary,
+        
+            fontWeight:"700"
         },
         labelBold: {
             color: colors.contentPrimary
@@ -137,18 +145,18 @@ export const useStyles = (colors: ColorsType) =>
             flexDirection: 'row',
             justifyContent: 'space-between',
             gap: 16,
-            marginTop: 24,
+           
             width: '100%',
         },
         cancelBtn: {
             flex: 1,
             height: 50,
-            borderRadius: 25,
+            borderRadius: 10,
             borderWidth: 1,
-            borderColor: '#E2D6DA',
+            borderColor: '#F3F3F3',
             justifyContent: 'center',
             alignItems: 'center',
-            backgroundColor: '#FFFFFF',
+            backgroundColor: '#F3F3F3',
         },
         cancelBtnText: {
             color: '#87848A',
@@ -158,7 +166,7 @@ export const useStyles = (colors: ColorsType) =>
         logoutConfirmBtn: {
             flex: 1,
             height: 50,
-            borderRadius: 25,
+              borderRadius: 10,
             backgroundColor: colors.primary,
             justifyContent: 'center',
             alignItems: 'center',

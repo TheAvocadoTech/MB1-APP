@@ -34,7 +34,7 @@
     "expo-file-system": "^19.0.24",
     "expo-gl": "~16.0.10",
     "expo-sensors": "~15.0.8",
-    "lucide-react-native": "^1.37.0",
+    "lucide-react-native": "^1.48.0",
     "memoize-one": "^6.0.0",
     "r3f-native-orbitcontrols": "^1.1.0",
     "react": "19.1.0",

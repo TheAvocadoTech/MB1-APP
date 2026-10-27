@@ -18,7 +18,7 @@ const CommonTabCard = ({ title, imageUri, imageStyle, onPress }: IProps) => {
         <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.85}>
             <Text varient='semiBold' style={styles.title}>{title}</Text>
             <View style={styles.circle}>
-                <Image source={imageUri} style={[styles.absoluteImage, imageStyle]} />
+                <Image source={imageUri} style={[styles.absoluteImage, imageStyle]} height={100} width={100} />
             </View>
         </TouchableOpacity>
     )

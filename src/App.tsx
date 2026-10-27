@@ -14,6 +14,7 @@ import { store } from './store/store';
 import { StackScreen } from 'react-native-screens'
 import { Asset } from 'expo-asset'
 import { APP_FLAVOR } from './config/flavor'
+import CommonsNavigationScreen from './features/dashboard/screens/commonsNavigation/CommonsNavigationScreen'
 
 const Stack = createNativeStackNavigator();
 const initialRoute = "splash"
@@ -23,6 +24,7 @@ const App = () => {
 const [isAssetsReady, setIsAssetsReady] = useState(false);
 
   useEffect(() => {
+    
     async function loadAssets() {
       try {
         // Pre-download and cache the 3D model right when the app boots up
@@ -49,8 +51,9 @@ const [isAssetsReady, setIsAssetsReady] = useState(false);
                             <Stack.Screen name="dashboard" component={DashboardScreen}/>
                             <Stack.Screen name="scanQr" component={ScanQr} />
                             <Stack.Screen name="cameraScanner" component={CameraScannerScreen} />
-
                             <Stack.Screen name="navigationScreen" component={NavigationScreen} />
+                            <Stack.Screen name="commonsNavigationScreen" component={CommonsNavigationScreen} />
+
                         </Stack.Navigator>
                     </NavigationContainer>
                 </NavigationIndependentTree>

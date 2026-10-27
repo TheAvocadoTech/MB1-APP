@@ -35,7 +35,6 @@ const ScanQr = () => {
                 </View>
 
                 <View style={styles.textContainer}>
-                    <Text style={[styles.inactiveText,{fontSize:13}]}>{BASE_URL}</Text>
                     <Text varient='medium' style={styles.inactiveText}>Welcome to EQUINIX Navigation Service </Text>
                     <Text style={styles.inactiveText}>Scan QR to continue your service</Text>
                 </View>

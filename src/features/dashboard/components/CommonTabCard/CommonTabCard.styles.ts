@@ -6,20 +6,20 @@ export const useStyles = (colors: ColorsType) =>
         container: {
             flex: 1,
             height: 199,
-            borderWidth: 1,
+           
             borderRadius: 11,
             backgroundColor: colors.background_primary,
-            borderColor: "#B4B4B44D ",
-            padding: 28,
+            borderColor: "#ECECEC ",
+            padding: 20,
             overflow: 'hidden'
         },
         title: {
-            fontSize: 22,
+            fontSize: 15,
             lineHeight: 18,
         },
         circle: {
-            width: 273,
-            height: 273,
+            width: 200,
+            height: 250,
             borderRadius: 273,
             backgroundColor: "#FEF4F5",
             alignSelf: "flex-end",
@@ -30,6 +30,7 @@ export const useStyles = (colors: ColorsType) =>
         absoluteImage: {
             position: "absolute",
             top: 20,
-            right: 70
+            right: 70,
+           
         }
     });

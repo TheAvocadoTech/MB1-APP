@@ -19,10 +19,11 @@ import { useStyles } from './NavigationScreen.styles';
 import { APP_FLAVOR } from '../../../../config/flavor';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 // import { MB1NativeMap3D } from '../../../../components/Map/MB1NativeMap3D';
-import { MB3Native3DMap } from '../../../../components/Map/MB3Native3DMap';
+import { MB3Native3DMap_GR } from '../../../../components/Map/MB3Native3DMap_GR';
 import { MB1Native3DMap } from '../../../../components/Map/MB1Native3DMap';
 import { setFloor,updateLiveLocation } from '../../../../store/slices/floorSlice';
 import { MB3Native3DMap_F1 } from '../../../../components/Map/MB3Native3DMap_F1';
+import MB1Native2DMap from '../../../../components/Map/MB1Native2DMap';
 
 // Retained temporarily as the former WebView implementation while MB1 uses
 // the native Filament renderer below.
@@ -1378,6 +1379,8 @@ const NavigationScreen = () => {
     const styles = useStyles(colors);
 
     const [selectedFloor, setSelectedFloor] = useState<string>(APP_FLAVOR === 'MB1' ? 'GR' : 'F1');
+    type Dimention="2D"|"3D";
+    const [selectedDimention,setSelectedDimention]=useState<Dimention>("2D");
     const [modelBase64, setModelBase64] = useState<string | null>(null);
     const [loadingModel, setLoadingModel] = useState<boolean>(true);
     const [pickedModelCoordinate, setPickedModelCoordinate] = useState<ModelCoordinate | null>(null);
@@ -1590,10 +1593,15 @@ const NavigationScreen = () => {
             // Ignore non-JSON WebView messages.
         }
     };
-
-    const handleSelectFloor = (floor: string) => {
-        setSelectedFloor(floor);
-        dispatch(setFloor(floor));
+    const handleSelectedDimention=(dimention:'2D'|'3D')=>{
+        setSelectedDimention(dimention)
+    }
+    const handleSelectedOption = (selectedValue: string) => {
+     
+            setSelectedFloor(selectedValue);
+            dispatch(setFloor(selectedValue));
+       
+      
         // if (webViewRef.current) {
         //     webViewRef.current.injectJavaScript(`window.selectFloor("${floor}"); void(0);`);
         
@@ -1708,9 +1716,13 @@ const NavigationScreen = () => {
                 {APP_FLAVOR === 'MB1' ? (
                   
                     //  <MB1NativeMap3D />
+                    (selectedDimention==='2D')?
+                    
+                    <MB1Native2DMap liveData={liveData}/>
+                 :
                  <MB1Native3DMap liveData={liveData}/>
                    
-                ) : (selectedFloor==='GR'?( <MB3Native3DMap/>):
+                ) : (selectedFloor==='GR'?( <MB3Native3DMap_GR/>):
                 (<MB3Native3DMap_F1 />)
                    
                 // <WebViewComponent
@@ -1762,33 +1774,48 @@ const NavigationScreen = () => {
                 )}
 
                 {/* Zoom controls HUD overlay */}
-                {APP_FLAVOR !== 'MB1' && <View style={styles.zoomHUD}>
+                {/* {APP_FLAVOR !== 'MB1' && <View style={styles.zoomHUD}>
                     <TouchableOpacity style={styles.zoomButton} onPress={handleZoomIn}>
                         <Text style={styles.zoomText}>+</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.zoomButton} onPress={handleZoomOut}>
                         <Text style={styles.zoomText}>−</Text>
                     </TouchableOpacity>
-                </View>}
+                </View>} */}
 
                 {/* HUD Floor level selector overlay */}
                 <View style={styles.floorSelectorContainer}>
-                    {(APP_FLAVOR === 'MB1' ? ['GR'] : ['F1', 'GR']).map((floor) => (
+                    {APP_FLAVOR === 'MB3' &&['F1', 'GR'].map((value) => (
                         <TouchableOpacity
-                            key={floor}
+                            key={value}
                             style={[
                                 styles.floorButton,
-                                selectedFloor === floor && styles.floorButtonActive,
+                                selectedFloor === value && styles.floorButtonActive||selectedDimention===value&&styles.floorButtonActive,
                             ]}
-                            onPress={() => handleSelectFloor(floor)}
-                        >
+                            onPress={() => handleSelectedOption(value)}>
                             <Text
                                 style={[
                                     styles.floorText,
-                                    selectedFloor === floor && styles.floorTextActive,
-                                ]}
-                            >
-                                {floor}
+                                    selectedFloor === value && styles.floorTextActive,
+                                ]}>
+                                {value}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                    {APP_FLAVOR === 'MB1' &&['2D', '3D'].map((value) => (
+                        <TouchableOpacity
+                            key={value}
+                            style={[
+                                styles.floorButton,
+                                selectedDimention === value && styles.floorButtonActive,
+                            ]}
+                            onPress={() => handleSelectedDimention(value as Dimention)}>
+                            <Text
+                                style={[
+                                    styles.floorText,
+                                    selectedFloor === value && styles.floorTextActive||selectedDimention===value&&styles.floorTextActive,
+                                ]}>
+                                {value}
                             </Text>
                         </TouchableOpacity>
                     ))}

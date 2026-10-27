@@ -14,9 +14,15 @@ export const ImageSource = {
     ServerCloud: require('../../../assets/Images/ServerCloud.png'),
     ServerMan: require('../../../assets/Images/ServerMan.png'),
     WashRoom: require('../../../assets/Images/WashRoom.png'),
-    DatacenterMap: require('../../../assets/Images/datacenter_map.jpg'),
+    // DatacenterMap: require('../../../assets/Images/datacenter_map.jpg'),
     MapGlb: require('../../../assets/Images/1stFloor.glb'),
     GrFloorGlb: require('../../../assets/Images/GRFloor.glb'),
     GroundFloor2D: require('../../../assets/Images/2dGroundFloor.png'),
     FirstFloor2D: require('../../../assets/Images/2dFirstFloor.png'),
+    Colo_2_Map2D:require('../../../assets/Images/COLO_2.png'),
+    Colo_3_Map2D:require('../../../assets/Images/COLO_3.png'),
+    MapFloorPlan2D:require('../../../assets/Images/map_floorplan.png'),
+
+
+
 }

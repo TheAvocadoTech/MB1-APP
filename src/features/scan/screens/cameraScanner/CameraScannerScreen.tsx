@@ -286,7 +286,7 @@ const CameraScannerScreen = () => {
 
     const qrValue = APP_FLAVOR === 'MB1'
         ? `http://192.168.20.10:3000/?token=${token}`
-        : 'https://equinix-temp.avocadotech.in/';
+        : `https://equinix-temp.avocadotech.in/?token=${token}`;
 
     // Render loading or error states
     if (permissionStatus === 'not-determined' && !fromNavigation) {

@@ -12,6 +12,7 @@ import {
   StyleSheet,
   Text,
   ActivityIndicator,
+  TouchableOpacity,
 } from 'react-native';
 
 import {
@@ -423,7 +424,6 @@ export const Native3DPathLayer = React.memo(({
     return { graphNodes: nodes, graphEdges: edges };
   }, [wayfindingData]);
 
-  // Dynamic calculation of Lift position based on active nodes
   const grLiftPos = useMemo(() => {
     const n12 = findWayfindingNode(graphNodes, '12');
     const n7 = findWayfindingNode(graphNodes, '7');
@@ -441,7 +441,6 @@ export const Native3DPathLayer = React.memo(({
     return { x: 5004.59, y: 2313.4 };
   }, [graphNodes]);
 
-  // Target Position Resolution logic aligned with MapView3D
   const resolvedTargetPos = useMemo(() => {
     if (selectedFloor === 'GR') {
       return grLiftPos;
@@ -680,18 +679,29 @@ function NavigationCameraController({
   controlsRef: any;
 }) {
   const { camera } = useThree();
+  const isInitialSet = useRef(false);
 
   useEffect(() => {
-    camera.up.set(0, 0, -1);
+    camera.up.set(0, 1, 0);
     camera.updateProjectionMatrix();
   }, [camera]);
 
   useEffect(() => {
-    if (controlsRef.current && (focusTarget[0] !== 0 || focusTarget[2] !== 0)) {
-      controlsRef.current.target.set(...focusTarget);
-      camera.position.set(focusTarget[0], focusTarget[1] + 120, focusTarget[2] - 140);
-      camera.lookAt(...focusTarget);
+    const isTargetReady = focusTarget[0] !== 0 || focusTarget[1] !== 0 || focusTarget[2] !== 0;
+
+    if (!isInitialSet.current && isTargetReady && controlsRef.current) {
+      const [fx, fy, fz] = focusTarget;
+
+      controlsRef.current.target.set(fx, fy, fz);
+
+      const zoomHeight = 45;
+      const depthOffset = 50; 
+
+      camera.position.set(fx, fy + zoomHeight, fz + depthOffset);
+      camera.lookAt(fx, fy, fz);
+      
       controlsRef.current.update();
+      isInitialSet.current = true;
     }
   }, [focusTarget, camera, controlsRef]);
 
@@ -707,6 +717,7 @@ const MapScene = React.memo(({
   wayfindingData,
   onLoaded,
   onInstructionUpdated,
+  onZoomInit,
 }: {
   modelUri: string;
   visitorPos: any;
@@ -716,10 +727,18 @@ const MapScene = React.memo(({
   wayfindingData: any;
   onLoaded: () => void;
   onInstructionUpdated: (instruction: any) => void;
+  onZoomInit?: (handlers: { zoomIn: () => void; zoomOut: () => void }) => void;
 }) => {
   const [modelTransform, setModelTransform] = useState<ModelMapTransform | null>(null);
   const [focusTarget, setFocusTarget] = useState<[number, number, number]>([0, 0, 0]);
   const controlsRef = useRef<any>(null);
+
+  // Continuously pump frame updates to keep touch gestures fluid in React Native
+  useFrame(() => {
+    if (controlsRef.current) {
+      controlsRef.current.update();
+    }
+  });
 
   const handleTransformReady = useCallback(
     (transform: ModelMapTransform) => {
@@ -734,7 +753,11 @@ const MapScene = React.memo(({
       let focus: [number, number, number] = [0, 0, 0];
 
       if (visitor && target) {
-        focus = [(visitor[0] + target[0]) / 2, (visitor[1] + target[1]) / 2, (visitor[2] + target[2]) / 2];
+        focus = [
+          (visitor[0] + target[0]) / 2,
+          (visitor[1] + target[1]) / 2,
+          (visitor[2] + target[2]) / 2,
+        ];
       } else if (target) {
         focus = target;
       } else if (visitor) {
@@ -750,6 +773,26 @@ const MapScene = React.memo(({
     },
     []
   );
+
+  const handleZoomIn = useCallback(() => {
+    if (controlsRef.current) {
+      controlsRef.current.dollyIn(1.15);
+      controlsRef.current.update();
+    }
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    if (controlsRef.current) {
+      controlsRef.current.dollyOut(1.15);
+      controlsRef.current.update();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (onZoomInit) {
+      onZoomInit({ zoomIn: handleZoomIn, zoomOut: handleZoomOut });
+    }
+  }, [onZoomInit, handleZoomIn, handleZoomOut]);
 
   return (
     <>
@@ -795,13 +838,21 @@ const MapScene = React.memo(({
         ref={controlsRef}
         makeDefault
         enableDamping={true}
-        dampingFactor={0.05}
+        dampingFactor={0.12}
+        rotateSpeed={0.6}
+        zoomSpeed={0.8}
+        panSpeed={0.8}
+        minDistance={20}
+        maxDistance={220}
         enablePan={true}
         enableZoom={true}
         enableRotate={true}
-        minDistance={20}
-        maxDistance={600}
-        target={focusTarget}
+        minPolarAngle={0.05}
+        maxPolarAngle={Math.PI / 2 - 0.1}
+        minAzimuthAngle={-Math.PI / 3}
+        maxAzimuthAngle={Math.PI / 3}
+        
+        /* Dedicated Touch Gesture Mapping to resolve event collision */
         touches={{
           ONE: TOUCH.ROTATE,
           TWO: TOUCH.DOLLY_PAN,
@@ -813,7 +864,7 @@ const MapScene = React.memo(({
   );
 });
 
-export const MB3Native3DMap = () => {
+export const MB3Native3DMap_GR = () => {
   const dispatch = useDispatch<AppDispatch>();
   const selectedFloor = useSelector((state: RootState) => state.floor.activeFloor || 'GR');
   
@@ -825,6 +876,12 @@ export const MB3Native3DMap = () => {
   const targetPos = useSelector((state: RootState) => state.floor.targetPos);
   const mapMeta = useSelector((state: RootState) => state.floor.mapMeta);
   const wayfindingData = useSelector((state: RootState) => state.floor.wayfindingData);
+  const zoomHandlers = useRef<{ zoomIn?: () => void; zoomOut?: () => void }>({});
+      
+
+  const handleZoomInit = useCallback((handlers: { zoomIn: () => void; zoomOut: () => void }) => {
+    zoomHandlers.current = handlers;
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -914,11 +971,12 @@ export const MB3Native3DMap = () => {
 
       {localUri && (
         <Canvas
+          gl={{ powerPreference: 'high-performance', antialias: false }}
           camera={{
-            position: [0, 150, 0],
+            position: [0, 120, -150],
             fov: 45,
             near: 0.1,
-            far: 100000,
+            far: 3000,
           }}>
           <MapScene
             modelUri={localUri}
@@ -929,9 +987,25 @@ export const MB3Native3DMap = () => {
             wayfindingData={wayfindingData}
             onLoaded={handleLoaded}
             onInstructionUpdated={setTurnInstruction}
+            onZoomInit={handleZoomInit}
           />
         </Canvas>
       )}
+
+      <View style={styles.zoomHUD}>
+        <TouchableOpacity
+          style={styles.zoomButton}
+          onPress={() => zoomHandlers.current.zoomOut?.()}
+        >
+          <Text style={styles.zoomText}>+</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.zoomButton}
+          onPress={() => zoomHandlers.current.zoomIn?.()}
+        >
+          <Text style={styles.zoomText}>-</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -946,36 +1020,60 @@ const styles = StyleSheet.create({
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
     zIndex: 20,
-    backgroundColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 15,
+    marginTop: 10,
+    fontSize: 14,
+    color: '#0284c7',
     fontWeight: '600',
-    color: '#334155',
   },
   hudCard: {
     position: 'absolute',
-    top: 20,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.9)',
-    borderRadius: 16,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    alignItems: 'center',
-    zIndex: 30,
+    top: 16,
+    left: 16,
+    right: 16,
+    zIndex: 10,
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
   },
   hudTitle: {
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
   },
   hudSubtext: {
     color: '#94a3b8',
     fontSize: 12,
     marginTop: 2,
+  },
+   zoomHUD: {
+            position: 'absolute',
+            left: 16,
+            bottom: 24,
+            gap: 8,
+        },
+  zoomButton: {
+            width: 48,
+            height: 48,
+            borderRadius: 12,
+            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            elevation: 3,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.15,
+            shadowRadius: 3,
+        },
+  zoomText: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#0f172a',
   },
 });

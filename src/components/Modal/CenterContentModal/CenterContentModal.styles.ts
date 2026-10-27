@@ -14,7 +14,7 @@ const useStyles = (colors: ColorsType) => StyleSheet.create({
         backgroundColor: colors.card_bg_primary,
         borderRadius: 16,
         borderWidth: 1,
-        borderColor: '#007AFF', // Blue border color
+        borderColor: '#FBEBEA', // Blue border color
         padding: 24,
         paddingTop: 32,
         minWidth: 300,
@@ -39,12 +39,11 @@ const useStyles = (colors: ColorsType) => StyleSheet.create({
         borderRadius: 30,
         backgroundColor: colors.card_bg_primary,
         borderWidth: 1,
-        borderColor: '#007AFF',
-        zIndex: 1,
+        borderColor: '#FBEBEA',
     },
     titleContainer: {
         width: '100%',
-        marginBottom: 12,
+        marginBottom: 0,
         alignItems: 'center',
     },
     titleText: {
@@ -52,6 +51,7 @@ const useStyles = (colors: ColorsType) => StyleSheet.create({
         color: colors.contentPrimary,
         textAlign: 'center',
         lineHeight: 24,
+        marginTop:10
     },
     descriptionContainer: {
         width: '100%',

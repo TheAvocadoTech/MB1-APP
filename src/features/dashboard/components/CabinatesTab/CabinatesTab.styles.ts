@@ -34,7 +34,7 @@ export const useStyles = (colors: ColorsType) =>
             flex: 1,
         },
         cardText: {
-            fontSize: 20,
+            fontSize: 15,
             color: colors.contentPrimary,
         },
         activeCardText: {

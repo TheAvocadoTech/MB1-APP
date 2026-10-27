@@ -13,6 +13,10 @@ export const useStyles = (colors: ColorsType) =>
             flexWrap: 'wrap',
             gap: 20,
         },
+         coloImage: {
+            width: 20,
+            height: 14
+        },
         washRoomImage: {
             width: 160,
             height: 114
@@ -28,6 +32,26 @@ export const useStyles = (colors: ColorsType) =>
         nocRoomImage: {
             width: 120,
             height: 120
+        },
+   
+        title: {
+            fontSize: 15,
+            lineHeight: 18,
+        },
+        circle: {
+            width: 200,
+            height: 250,
+            borderRadius: 273,
+            backgroundColor: "#FEF4F5",
+            alignSelf: "flex-end",
+            position: "absolute",
+            right: -60,
+            bottom: -120
+        },
+        absoluteImage: {
+            position: "absolute",
+            top: 20,
+            right: 70,
+           
         }
-
     });

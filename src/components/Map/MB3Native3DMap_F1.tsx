@@ -13,6 +13,7 @@ import {
   StyleSheet,
   Text,
   ActivityIndicator,
+  TouchableOpacity,
 } from 'react-native';
 
 import {
@@ -35,10 +36,10 @@ import {
   CircleGeometry,
   SphereGeometry,
   BufferGeometry,
-  LineSegments,
   Float32BufferAttribute,
   Box3,
   TOUCH,
+  Group,
 } from 'three';
 import type { GLTF } from 'three-stdlib';
 import { Asset } from 'expo-asset';
@@ -48,21 +49,20 @@ import { FLOOR_MAP_IDS } from '../../constants/constants';
 
 const MB3_F1 = require('../../assets/models/1st-floor.glb');
 
-// Model calibration setup
+// Fixed Model Base Anchor setup
 const F1_CALIBRATION = {
-  posX: -9.5,  
-  posY: 0.0,   
-  posZ: -38.0, // Base vertical alignment preserved
-  scaleX: 1.0, 
-  scaleY: 1.0, 
+  posX: -9.5,
+  posY: 0.0,
+  posZ: -38.0,
+  scaleX: 1.0,
+  scaleY: 1.0,
   scaleZ: 1.0,
 };
 
-// Independent offsets ONLY for nodes/paths
-const NODE_OFFSET_X = 0.0;  // Horizontal shift (+ to move right, - to move left)
-const NODE_OFFSET_Z = -5.0; // Forward/Backward shift (Make more negative to push FORWARD)
+// Fixed Node Offsets
+const NODE_OFFSET_X = 1.5;
+const NODE_OFFSET_Z = -3.5;
 
-// Map dimension & pixel-per-meter defaults
 const DEFAULT_MAP_META = {
   width_m: 127.81,
   height_m: 102.25,
@@ -81,7 +81,8 @@ const MapLoadingUI = () => (
 );
 
 /**
- * Maps 2D pixel space directly into 3D world space aligned with GLTF Model
+ * Maps 2D pixel space directly into local 3D floor space
+ * Pure deterministic coordinate transform (No dynamic bounding shifts)
  */
 function mapTo3D(
   pixelX: number,
@@ -93,21 +94,17 @@ function mapTo3D(
   const widthMeters = mapMeta?.width_m || DEFAULT_MAP_META.width_m;
   const heightMeters = mapMeta?.height_m || DEFAULT_MAP_META.height_m;
 
-  // 1. Convert pixel coordinates to meter space centered at origin (0,0)
+  // Convert pixel coordinates to meter space centered at origin (0,0)
   const rawX3D = (Number(pixelX) / ppm) - (widthMeters / 2);
   const rawZ3D = (Number(pixelY) / ppm) - (heightMeters / 2);
 
-  // 2. Apply model base position AND independent node offsets
-  const calibratedX = (rawX3D * F1_CALIBRATION.scaleX) + F1_CALIBRATION.posX + NODE_OFFSET_X;
-  const calibratedZ = (rawZ3D * F1_CALIBRATION.scaleZ) + F1_CALIBRATION.posZ + NODE_OFFSET_Z;
+  const calibratedX = (rawX3D * F1_CALIBRATION.scaleX) + NODE_OFFSET_X;
+  const calibratedZ = (rawZ3D * F1_CALIBRATION.scaleZ) + NODE_OFFSET_Z;
   const calibratedY = elevationY * F1_CALIBRATION.scaleY;
 
   return [calibratedX, calibratedY, calibratedZ];
 }
 
-/**
- * Universal Node Lookup
- */
 function findWayfindingNode(nodesList: any[], targetId: string | number) {
   if (!nodesList) return null;
   const list = Array.isArray(nodesList) ? nodesList : Object.values(nodesList);
@@ -145,9 +142,6 @@ function findWayfindingNode(nodesList: any[], targetId: string | number) {
   return null;
 }
 
-/**
- * Dijkstra Path Computation
- */
 function calculateDijkstraPath(
   nodesList: any[],
   edgesMap: Record<string, any>,
@@ -268,9 +262,6 @@ function calculateDijkstraPath(
   return [...pathNodes, { x: endPos.x, y: endPos.y }];
 }
 
-/**
- * Overlay component for graph nodes and connecting network edges
- */
 const GraphDebugOverlay = React.memo(({
   graphNodes,
   graphEdges,
@@ -331,7 +322,6 @@ const GraphDebugOverlay = React.memo(({
 
   return (
     <group key="graph-debug-overlay">
-      {/* Node Spheres */}
       {parsedNodes.map((node) => (
         <mesh
           key={`node-${node.id}`}
@@ -343,7 +333,6 @@ const GraphDebugOverlay = React.memo(({
         </mesh>
       ))}
 
-      {/* Connected Line Edges */}
       {edgeLinesGeometry && (
         <lineSegments geometry={edgeLinesGeometry} frustumCulled={false}>
           <lineBasicMaterial color="#0284c7" transparent opacity={0.4} linewidth={1} />
@@ -417,7 +406,17 @@ export const Native3DPathLayer = React.memo(({
 
   useEffect(() => {
     if (onPositionsComputed && liveVisitorPos && targetPosTuple) {
-      onPositionsComputed(liveVisitorPos, targetPosTuple);
+      const worldVisitor: [number, number, number] = [
+        liveVisitorPos[0] + F1_CALIBRATION.posX,
+        liveVisitorPos[1] + F1_CALIBRATION.posY,
+        liveVisitorPos[2] + F1_CALIBRATION.posZ,
+      ];
+      const worldTarget: [number, number, number] = [
+        targetPosTuple[0] + F1_CALIBRATION.posX,
+        targetPosTuple[1] + F1_CALIBRATION.posY,
+        targetPosTuple[2] + F1_CALIBRATION.posZ,
+      ];
+      onPositionsComputed(worldVisitor, worldTarget);
     }
   }, [liveVisitorPos, targetPosTuple, onPositionsComputed]);
 
@@ -460,14 +459,12 @@ export const Native3DPathLayer = React.memo(({
 
   return (
     <group key={`path-layer-f1`}>
-      {/* Node Graph Overlay & Connections */}
       <GraphDebugOverlay
         graphNodes={graphNodes}
         graphEdges={graphEdges}
         mapMeta={mapMeta}
       />
 
-      {/* Calculated Wayfinding Tube Path */}
       {pathCurve && (
         <>
           <mesh frustumCulled={false}>
@@ -481,7 +478,6 @@ export const Native3DPathLayer = React.memo(({
         </>
       )}
 
-      {/* Visitor Origin Marker */}
       {liveVisitorPos && (
         <group position={liveVisitorPos} rotation={[-Math.PI / 2, 0, 0]}>
           <mesh ref={pulseMeshRef} frustumCulled={false} geometry={MARKER_RING_GEO}>
@@ -493,7 +489,6 @@ export const Native3DPathLayer = React.memo(({
         </group>
       )}
 
-      {/* Target Destination Marker */}
       {targetPosTuple && (
         <group position={targetPosTuple} rotation={[-Math.PI / 2, 0, 0]}>
           <mesh frustumCulled={false} geometry={MARKER_RING_GEO}>
@@ -514,26 +509,19 @@ export const FacilityModel = ({
   modelUri: string;
 }) => {
   const gltf = useGLTF(modelUri) as GLTF;
-  const { scene } = gltf;
+  
+  // Clone scene on mount to prevent cache mutation persistence across unmounts/remounts
+  const clonedScene = useMemo(() => {
+    const clone = gltf.scene.clone(true);
+    const box = new Box3().setFromObject(clone);
+    const center = box.getCenter(new Vector3());
 
-  useLayoutEffect(() => {
-    if (scene) {
-      const box = new Box3().setFromObject(scene);
-      const center = box.getCenter(new Vector3());
-      scene.position.x = -center.x;
-      scene.position.y = -box.min.y;
-      scene.position.z = -center.z;
-    }
-  }, [scene]);
+    // Center internal mesh coordinates without modifying external transform matrix
+    clone.position.set(-center.x, -box.min.y, -center.z);
+    return clone;
+  }, [gltf]);
 
-  return (
-    <group
-      position={[F1_CALIBRATION.posX, F1_CALIBRATION.posY, F1_CALIBRATION.posZ]}
-      scale={[F1_CALIBRATION.scaleX, F1_CALIBRATION.scaleY, F1_CALIBRATION.scaleZ]}
-    >
-      <primitive object={scene} />
-    </group>
-  );
+  return <primitive object={clonedScene} />;
 };
 
 const MapScene = ({
@@ -542,15 +530,23 @@ const MapScene = ({
   targetPos,
   mapMeta,
   wayfindingData,
+  onZoomInit,
 }: {
   modelUri: string;
   visitorPos: any;
   targetPos: any;
   mapMeta: any;
   wayfindingData: any;
+  onZoomInit?: (handlers: { zoomIn: () => void; zoomOut: () => void }) => void;
 }) => {
   const [focusTarget, setFocusTarget] = useState<[number, number, number]>([0, 0, 0]);
   const controlsRef = useRef<any>(null);
+  const initialFramedRef = useRef(false);
+
+  // Reset framing guard on modelUri change / remount
+  useEffect(() => {
+    initialFramedRef.current = false;
+  }, [modelUri]);
 
   const handlePositionsComputed = useCallback(
     (visitor: [number, number, number] | null, target: [number, number, number] | null) => {
@@ -560,15 +556,50 @@ const MapScene = ({
       const midY = (visitor[1] + target[1]) / 2;
       const midZ = (visitor[2] + target[2]) / 2;
 
+      const dx = target[0] - visitor[0];
+      const dz = target[2] - visitor[2];
+      const distance = Math.hypot(dx, dz);
+
       setFocusTarget((prev) => {
         if (Math.abs(prev[0] - midX) < 0.1 && Math.abs(prev[2] - midZ) < 0.1) {
           return prev;
         }
         return [midX, midY, midZ];
       });
+
+      if (!initialFramedRef.current && controlsRef.current) {
+        initialFramedRef.current = true;
+        const camera = controlsRef.current.object;
+        if (camera) {
+          const heightOffset = Math.max(distance * 1.2, 40);
+          camera.position.set(midX, heightOffset, midZ + heightOffset * 0.8);
+          controlsRef.current.target.set(midX, midY, midZ);
+          controlsRef.current.update();
+        }
+      }
     },
     []
   );
+
+  const handleZoomIn = useCallback(() => {
+    if (controlsRef.current) {
+      controlsRef.current.dollyIn(1.2);
+      controlsRef.current.update();
+    }
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    if (controlsRef.current) {
+      controlsRef.current.dollyOut(1.2);
+      controlsRef.current.update();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (onZoomInit) {
+      onZoomInit({ zoomIn: handleZoomIn, zoomOut: handleZoomOut });
+    }
+  }, [onZoomInit, handleZoomIn, handleZoomOut]);
 
   return (
     <>
@@ -576,15 +607,20 @@ const MapScene = ({
       <directionalLight position={[50, 100, 50]} intensity={1.6} />
 
       <Suspense fallback={null}>
-        <FacilityModel modelUri={modelUri} />
+        <group
+          position={[F1_CALIBRATION.posX, F1_CALIBRATION.posY, F1_CALIBRATION.posZ]}
+          scale={[F1_CALIBRATION.scaleX, F1_CALIBRATION.scaleY, F1_CALIBRATION.scaleZ]}
+        >
+          <FacilityModel modelUri={modelUri} />
 
-        <Native3DPathLayer
-          visitorPos={visitorPos}
-          targetPos={targetPos}
-          mapMeta={mapMeta}
-          wayfindingData={wayfindingData}
-          onPositionsComputed={handlePositionsComputed}
-        />
+          <Native3DPathLayer
+            visitorPos={visitorPos}
+            targetPos={targetPos}
+            mapMeta={mapMeta}
+            wayfindingData={wayfindingData}
+            onPositionsComputed={handlePositionsComputed}
+          />
+        </group>
       </Suspense>
 
       <OrbitControls
@@ -595,12 +631,16 @@ const MapScene = ({
         enablePan={true}
         enableZoom={true}
         enableRotate={true}
-        minDistance={20}
+        minDistance={10}
         maxDistance={600}
         target={focusTarget}
+        minPolarAngle={0.01}
+        maxPolarAngle={Math.PI / 2 - 0.1}
+        minAzimuthAngle={-Math.PI / 3}
+        maxAzimuthAngle={Math.PI / 3}
         touches={{
           ONE: TOUCH.ROTATE,
-          TWO: TOUCH.DOLLY_PAN,
+          TWO: TOUCH.DOLLY_ROTATE,
         }}
       />
     </>
@@ -700,12 +740,19 @@ export const MB3Native3DMap_F1 = () => {
     };
   }, []);
 
+  const zoomHandlers = useRef<{ zoomIn?: () => void; zoomOut?: () => void }>({});
+
+  const handleZoomInit = useCallback((handlers: { zoomIn: () => void; zoomOut: () => void }) => {
+    zoomHandlers.current = handlers;
+  }, []);
+
   return (
     <View style={styles.container}>
       {isLoading && <MapLoadingUI />}
 
       {localUri && (
         <Canvas
+          key={`canvas-f1-${FLOOR_MAP_IDS.F1}`}
           camera={{
             position: [0, 150, 50],
             fov: 45,
@@ -718,9 +765,25 @@ export const MB3Native3DMap_F1 = () => {
             targetPos={targetPos || { x: 5525.298, y: 2491.837 }}
             mapMeta={mapMeta}
             wayfindingData={wayfindingData}
+            onZoomInit={handleZoomInit}
           />
         </Canvas>
       )}
+
+      <View style={styles.zoomHUD}>
+        <TouchableOpacity
+          style={styles.zoomButton}
+          onPress={() => zoomHandlers.current.zoomOut?.()}
+        >
+          <Text style={styles.zoomText}>+</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.zoomButton}
+          onPress={() => zoomHandlers.current.zoomIn?.()}
+        >
+          <Text style={styles.zoomText}>-</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -745,5 +808,29 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#334155',
+  },
+  zoomHUD: {
+    position: 'absolute',
+    left: 16,
+    bottom: 24,
+    gap: 8,
+  },
+  zoomButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+  },
+  zoomText: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#0f172a',
   },
 });
